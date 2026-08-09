@@ -2,26 +2,32 @@
 
 | 項目 | 内容 |
 |---|---|
-| ドキュメント版数 | v0.3 |
+| ドキュメント版数 | v0.4 |
 | 更新日 | 2026-08-09 |
-| 主な変更 | **BtoB 化。** テナント分離（ADR-010）、事前集計（ADR-011）、認証（ADR-004 改訂）を追加。キャパシティ試算をエンタープライズ前提に更新 |
-| 関連 | [要件定義書](requirements.md) / [評価モデル](evaluation-model.md) / [ソクラテス式エンジン仕様](socratic-engine.md) / [デプロイ](deployment.md) |
+| 主な変更 | v0.1 の実装方針を追加（ADR-012 同一オリジン配信 / ADR-013 フレームワークなし / ADR-014 MOCK モード） |
+| 関連 | [v0.1 スコープ](scope-v0.1.md) / [要件定義書](requirements.md) / [コストモデル](cost-model.md) / [セキュリティ](security.md) |
+
+> ⚠️ **本書は将来像を含む全体像である。**
+> 直近の実装対象は [scope-v0.1.md](scope-v0.1.md) を参照すること。
+> ADR には「v0.1 で採用」「v0.2 以降」の区別を各項目に明記している。
 
 ---
 
-## 1. 全体構成
+## 1. 全体構成（v0.1）
+
+**フロントエンドも関数から配信する。デプロイ先は enebular ひとつ**（[ADR-012](#adr-012-フロントエンドを関数から同一オリジンで配信する)）。
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │  ブラウザ                                                      │
 │  ┌────────────────────────────────────────────────────────┐  │
-│  │  apps/web — Next.js 15 (App Router) / Vercel            │  │
-│  │  ・エラー投稿フォーム  ・質問カード / 選択肢 UI            │  │
-│  │  ・段階プログレス      ・スコアレーダーチャート             │  │
+│  │  index.html / styles.css / app.js                       │  │
+│  │  フレームワークなし。素の HTML + CSS + JavaScript         │  │
+│  │  1 画面の中で Gate A → B → C → 結果 と状態が進む          │  │
 │  └────────────────────────────────────────────────────────┘  │
 └───────────────────────────┬──────────────────────────────────┘
-                            │ HTTPS / JSON（バッファ応答・ストリーミング不可）
-                            │ Cookie: sm_session (JWT)
+                            │ 同一オリジン / JSON（バッファ応答・ストリーミング不可）
+                            │ Cookie: sm_session (JWT, HttpOnly, SameSite=Lax)
                             ▼
 ┌──────────────────────────────────────────────────────────────┐
 │  enebular クラウド実行環境（ZIP / Node.js 22.x / AWS Lambda）  │
@@ -29,22 +35,29 @@
 │                                                               │
 │   index.js  ─ exports.handler = async (event) => {...}        │
 │      │  ※ esbuild で単一 CommonJS ファイルにバンドル            │
+│      │    静的ファイルも文字列として同梱される                    │
 │      ▼                                                        │
 │  ┌─ Hono ルーター（aws-lambda アダプタ）────────────────────┐  │
-│  │  POST /sessions   POST /sessions/:id/diagnose            │  │
-│  │  POST /sessions/:id/answers   /hints  /conclusion        │  │
-│  │  GET  /sessions/:id/report    /me/sessions  /me/stats    │  │
+│  │  GET  /            → index.html                          │  │
+│  │  GET  /app.js /styles.css                                │  │
+│  │  POST /v1/auth/login  /v1/auth/signup                    │  │
+│  │  POST /v1/sessions    /v1/sessions/:id/diagnose          │  │
+│  │  POST /v1/sessions/:id/{hints,advance,answers}           │  │
+│  │  POST /v1/sessions/:id/{conclusion,reveal,retrospect}    │  │
+│  │  GET  /v1/sessions/:id/report  /v1/me/{sessions,stats}   │  │
 │  └────────────────────────────┬─────────────────────────────┘ │
 │                               ▼                               │
 │  ┌─ packages/core（純粋なドメインロジック / 外部依存なし）───┐  │
-│  │  段階遷移ステートマシン ・ スコアリング ・ LeakGuard        │  │
-│  │  秘匿情報マスキング                                        │  │
+│  │  ゲート遷移 ・ 段階遷移 ・ スコアリング                     │  │
+│  │  LeakGuard ・ 秘匿情報マスキング                           │  │
 │  └────────────────────────────┬─────────────────────────────┘ │
 │              ┌────────────────┴────────────────┐              │
 │              ▼                                 ▼              │
 │  ┌─ packages/llm ──────────┐   ┌─ packages/datastore ──────┐  │
-│  │ Diagnoser / Questioner  │   │ @uhuru/enebular-sdk ラッパ │  │
-│  │ Judge / Reporter        │   │ CloudDataStoreClient      │  │
+│  │ Diagnoser（高品質）      │   │ @uhuru/enebular-sdk ラッパ │  │
+│  │ Hinter/Questioner/Judge │   │ CloudDataStoreClient      │  │
+│  │  （安価）                │   │                           │  │
+│  │ ★ MOCK_MODE で全て固定応答│   │                           │  │
 │  └───────────┬─────────────┘   └────────────┬──────────────┘  │
 └──────────────┼──────────────────────────────┼─────────────────┘
                │ OpenAI 互換 API               │ 実行環境が自動で認証情報を注入
@@ -52,9 +65,10 @@
 ┌──────────────────────────┐   ┌───────────────────────────────┐
 │  OrcaRouter（必須）        │   │  enebular データストア          │
 │  api.orcarouter.ai/v1     │   │  JSON アイテム / メインキー +   │
-│  ├ openai/*               │   │  サブキー（DynamoDB 型 KV）     │
-│  ├ anthropic/*            │   │  sessions / session_secrets /  │
-│  └ google/*               │   │  reports / ops_logs            │
+│  ├ openai/*     ← 安価    │   │  サブキー（DynamoDB 型 KV）     │
+│  ├ anthropic/*  ← 高品質  │   │  users / sessions /            │
+│  └ google/*     ← 退避先  │   │  session_secrets / reports /   │
+│                           │   │  ops_logs（コストログ）         │
 └──────────────────────────┘   └───────────────────────────────┘
 ```
 
@@ -85,16 +99,17 @@
 
 | レイヤ | 採用技術 | 選定理由 |
 |---|---|---|
-| 言語 | TypeScript（全レイヤ） | FE/BE で Zod スキーマを共有し、API 契約を 1 箇所で定義できる |
-| フロントエンド | Next.js 15 (App Router) / Vercel | UI の反復速度、将来の OGP / SEO |
-| スタイル | Tailwind CSS | |
+| 言語 | TypeScript（バックエンド）/ 素の JavaScript（フロント） | BE は型で契約を守る。FE はビルド不要にする（ADR-013） |
+| **フロントエンド** | **フレームワークなし。HTML + CSS + 素の JavaScript** | ビルド工程と依存をゼロにする（ADR-013） |
+| **配信** | **バックエンドの関数が静的ファイルを返す（同一オリジン）** | CORS・Cookie・デプロイ 2 系統を消す（ADR-012） |
 | **実行基盤** | **enebular クラウド実行環境（ZIP / Node.js 22.x）** | 必須要件 |
 | ルーター | Hono + `hono/aws-lambda` | Lambda ハンドラに 1 行でアダプトでき、パスが 1 本の HTTP トリガーでも内部ルーティングできる |
 | バンドル | esbuild（`--platform=node --format=cjs --bundle`） | E3 の CommonJS / ルート直下要件を満たしつつ、ワークスペース依存を解決し ZIP を小さくする |
 | **データストア** | **enebular データストア**（`@uhuru/enebular-sdk`） | 必須要件 |
 | LLM ゲートウェイ | **OrcaRouter**（OpenAI 互換） | 必須要件。公式 `openai` SDK をそのまま利用 |
-| バリデーション | Zod | `packages/shared` に置き FE/BE 双方から参照 |
-| モノレポ | pnpm workspaces + Turborepo | 型共有とビルドキャッシュ |
+| バリデーション | Zod | サーバ側の入力検証（[security.md §2.2](security.md#22-入力バリデーションf05)） |
+| 認証 | メール + パスワード（scrypt）+ JWT Cookie | 外部 IdP への依存を作らない（[scope-v0.1.md §4.2](scope-v0.1.md#42-認証を最小構成にする)） |
+| モノレポ | pnpm workspaces + Turborepo | パッケージ分割とビルドキャッシュ |
 | テスト | Vitest | `packages/core` の純関数と LeakGuard 回帰テスト |
 | CI / CD | GitHub Actions + `@uhuru/enebular-cli` | ZIP のビルドとデプロイを自動化（→ [deployment.md](deployment.md)） |
 
@@ -102,16 +117,37 @@
 
 ## 4. ADR（アーキテクチャ決定記録）
 
+| ADR | 内容 | 採用 |
+|---|---|---|
+| 001 | フロントエンドとバックエンドを分離する | v0.1（ただし配信は同一オリジン → ADR-012） |
+| 002 | バックエンドを TypeScript にする | v0.1 |
+| 003 | LLM を用途別に 3 つの役割へ分離する | **v0.1（コアの核）** |
+| 004 | 認証を必須とする | v0.1（簡易版）/ SSO は v0.2 |
+| 005 | 内部診断と正解を別テーブルに隔離する | **v0.1（コアの核）** |
+| 006 | SSE を廃止し「診断の先行実行」で体感速度を確保する | v0.1 |
+| 007 | 「先輩が考えている」演出でレイテンシを体験に変える | v0.1 |
+| 008 | esbuild で単一 CommonJS にバンドルして ZIP 化する | v0.1 |
+| 009 | Hono を Lambda ハンドラのルーターとして使う | v0.1 |
+| 010 | テナント分離をキー設計とブランド型で強制する | **v0.2**（F16 Won't） |
+| 011 | ダッシュボードの集計を事前計算する | **v0.2** |
+| 012 | フロントエンドを関数から同一オリジンで配信する | **v0.1** |
+| 013 | フロントエンドをフレームワークなしで書く | **v0.1** |
+| 014 | MOCK モードを最初に実装する | **v0.1** |
+
 ### ADR-001: フロントエンドとバックエンドを分離する
 
-**決定**: `apps/web`（Vercel）と `apps/function`（enebular）を分ける。
+**決定**: `apps/web`（フロント）と `apps/function`（バックエンド）を**コードとして**分ける。
+
+> **v0.1 では配信は同一オリジン**（[ADR-012](#adr-012-フロントエンドを関数から同一オリジンで配信する)）。
+> 分けているのはコードの責務であって、デプロイ先ではない。
 
 **理由**:
 - `ORCAROUTER_API_KEY` と内部診断（＝答え）を**物理的にフロントの外**に置くことが、この製品では機能要件そのもの（P1: 答えは言わない）
 - 実行基盤が enebular である以上、そもそも分離は必然
 - 将来の IDE 拡張 / CLI（v3）は同じ HTTP トリガーを叩く
 
-**トレードオフ**: デプロイ先が 2 系統になり、CORS を明示設定する必要がある。
+**トレードオフ**: 分離を配信レベルまで徹底するとデプロイ先が 2 系統になり、CORS の管理が要る。
+v0.1 はそこまでやらず、コードの分離だけを取る。
 
 ---
 
@@ -173,6 +209,113 @@ Questioner には結論（`rootCause`）を渡さず、着目点（`focusHints`�
 **却下案**: アプリケーション層でのフィルタリング。
 `WHERE tenant_id = ?` を書き忘れた 1 箇所で破綻するため。
 **忘れられる防御は防御ではない。**
+
+---
+
+### ADR-012: フロントエンドを関数から同一オリジンで配信する
+
+**採用**: v0.1
+
+**決定**: フロントエンドを別ホスティングに置かず、
+**enebular クラウド実行環境の関数が静的ファイル（HTML / CSS / JS）をそのまま返す**。
+
+```ts
+// esbuild の loader で静的ファイルを文字列として取り込む
+import indexHtml from './public/index.html'    // loader: { '.html': 'text' }
+import appJs     from './public/app.js'
+import stylesCss from './public/styles.css'
+
+app.get('/',           c => c.html(indexHtml))
+app.get('/app.js',     c => c.text(appJs,     200, { 'Content-Type': 'application/javascript' }))
+app.get('/styles.css', c => c.text(stylesCss, 200, { 'Content-Type': 'text/css' }))
+```
+
+**理由**: これで**消える作業とリスク**の方が、得られる柔軟性より大きい。
+
+| 消えるもの | 内容 |
+|---|---|
+| CORS 設定 | 同一オリジンになる。プリフライトも許可オリジン管理も不要 |
+| `SameSite=None` 問題 | 別オリジンだと Cookie に `SameSite=None; Secure` が必須になり、環境差で詰まりやすい。同一オリジンなら `Lax` で足りる |
+| デプロイ先 2 系統 | ZIP 1 つで完結する。バージョンずれが起きない |
+| API ベース URL の環境変数 | 相対パス `/v1/...` で済む。環境ごとの差異が消える |
+
+esbuild が既にバンドルを行っているため、**静的ファイルの同梱に追加のツールは要らない**。
+サイズも数十 KB で、ZIP の 250MB 制限に対して無視できる。
+
+**トレードオフ**: フロントを更新するたびに ZIP を再デプロイすることになる。
+CDN によるキャッシュ配信も効かない。**v0.1 の規模では問題にならない**が、
+利用者が増えて配信効率が問題になった段階で分離を検討する。
+
+**却下案**: Vercel / GitHub Pages で静的配信し、API は enebular。
+構成としては素直だが、上表の 4 つをすべて自前で管理することになる。
+
+---
+
+### ADR-013: フロントエンドをフレームワークなしで書く
+
+**採用**: v0.1
+
+**決定**: React / Next.js を使わず、**HTML + CSS + 素の JavaScript** で書く。ビルド工程を持たない。
+
+```
+apps/web/public/
+├── index.html      1 枚。画面の状態はセクションの表示切替で表現する
+├── styles.css      1 枚
+└── app.js          1 枚。fetch と DOM 操作のみ
+```
+
+**理由**:
+
+| # | 理由 |
+|---|---|
+| 1 | **画面が 1 枚しかない。** ルーティングも、複雑な状態管理も要らない。フレームワークが解く問題が存在しない |
+| 2 | **ビルド工程が消える。** バンドラ設定・トランスパイル・依存更新に時間を取られない |
+| 3 | **ADR-012 と噛み合う。** 静的ファイルをそのまま返せる形になる |
+| 4 | 依存パッケージが増えないことは、そのまま攻撃面が増えないことでもある |
+
+**この決定に伴い、意識して守るべきこと**:
+
+React のような**自動エスケープがない**。
+LLM の出力とユーザー入力を DOM に入れるときは `textContent` を使い、
+`innerHTML` を使わない（[security.md §7](security.md#7-その他)）。
+**フレームワークが肩代わりしていた防御を、自分で持つ必要がある。**
+
+**v0.2 以降**: 組織ダッシュボード（複数画面・グラフ・一覧）が入る段階で、
+フレームワーク導入を再検討する。**v0.1 の 1 画面には過剰である**というだけで、
+将来にわたって不要という判断ではない。
+
+---
+
+### ADR-014: MOCK モードを最初に実装する
+
+**採用**: v0.1
+
+**決定**: 環境変数 `MOCK_MODE=true` のとき、LLM を一切呼ばず固定応答を返す。
+**`packages/llm` の各役割に、実装と並べて mock 実装を持つ。**
+
+```ts
+// packages/llm/src/questioner.ts
+export async function generateQuestion(input: QuestionInput): Promise<Question> {
+  if (config.mockMode) return MOCK_QUESTIONS[input.stage]   // ← 入口で分岐する
+  return callOrcaRouter(...)
+}
+```
+
+**理由**: 開発・テスト・デモの 3 局面すべてに効き、かつ実装が安い。
+
+| 局面 | 効果 |
+|---|---|
+| UI 開発 | LLM の応答を待たずに全画面を通せる。**反復速度が大きく変わる** |
+| 自動テスト | 応答が決定的になり、主要導線のテストが書ける（F13） |
+| コスト | 開発中・CI の LLM 課金がゼロ（[cost-model.md §7](cost-model.md#7-mock-モードとコストf04)） |
+| **デモ** | 通信障害・レート制限・モデル障害があっても**導線が最後まで通る** |
+
+**最初に作ることが重要。** 後から入れると LLM 呼び出しがコードの各所に散った後になり、
+分岐の差し込み箇所が増えて高くつく。**`packages/llm` の各関数の入口 1 箇所**で分岐する形を、
+最初の実装時点で作っておく。
+
+**注意**: MOCK モードであることを画面に明示する。
+本番だと思って見た人が誤解しないようにする。
 
 ---
 
@@ -327,36 +470,21 @@ SocraMetry/
 │   └── roadmap.md                #   マイルストーン
 │
 ├── apps/
-│   ├── web/                      # ★ フロントエンド (Next.js 15 / Vercel)
-│   │   ├── app/
-│   │   │   ├── page.tsx                    # ランディング / エラー投稿
-│   │   │   ├── sessions/[id]/page.tsx      # 問答画面（3 ゲート）
-│   │   │   ├── sessions/[id]/report/       # 振り返りレポート
-│   │   │   ├── me/                         # 個人ダッシュボード・履歴
-│   │   │   ├── assignments/                # 割り当てられた演習
-│   │   │   └── org/                        # ★組織ダッシュボード・問題集・メンバー
-│   │   ├── components/
-│   │   │   ├── error-input/                # エラー貼り付けフォーム
-│   │   │   ├── hint-panel/                 # Gate A: ヒント表示と段階開放
-│   │   │   ├── question-card/              # Gate B: 設問 + 選択肢
-│   │   │   ├── reveal-panel/               # Gate C: 解説 + 振り返り 1 問
-│   │   │   ├── gate-progress/              # A/B/C の現在地
-│   │   │   ├── stage-progress/             # Lv1〜Lv5 のプログレス
-│   │   │   ├── thinking-mentor/            # 「先輩が考えている」演出 (ADR-007)
-│   │   │   ├── score-radar/                # デバッグ脳スコア（5 軸）
-│   │   │   ├── growth-chart/               # 成長率の推移
-│   │   │   └── org-insight/                # 組織の弱点サマリ
-│   │   ├── lib/
-│   │   │   ├── api-client.ts               # HTTP トリガーへの型付きクライアント
-│   │   │   └── diagnose-trigger.ts         # ADR-006 の先行診断キック
-│   │   └── ...
+│   ├── web/                      # ★ フロントエンド（ビルドなし / ADR-013）
+│   │   └── public/
+│   │       ├── index.html                  # 1 枚。全画面がこの中にある
+│   │       ├── styles.css                  # 1 枚
+│   │       └── app.js                      # 1 枚。fetch と DOM 操作のみ
+│   │       #                                 ↑ ADR-012 により apps/function が配信する
 │   │
 │   └── function/                 # ★ enebular クラウド実行環境 (ZIP)
 │       ├── src/
 │       │   ├── index.ts                    # exports.handler（Hono アダプタ）
 │       │   ├── app.ts                      # Hono アプリ本体
 │       │   ├── local.ts                    # ローカル起動 (@hono/node-server)
+│       │   ├── static.ts                   # 静的ファイルの配信 (ADR-012)
 │       │   ├── routes/
+│       │   │   ├── auth.ts                 # サインアップ / ログイン（簡易）
 │       │   │   ├── sessions.ts             # 作成 / 取得 / 削除
 │       │   │   ├── diagnose.ts             # 先行診断 (ADR-006)
 │       │   │   ├── hints.ts                # Gate A: ヒント開放
@@ -364,67 +492,73 @@ SocraMetry/
 │       │   │   ├── answers.ts              # Gate B: 回答受付・次問返却
 │       │   │   ├── reveal.ts               # Gate C: 開示 + 振り返り
 │       │   │   ├── reports.ts              # レポート・個人統計
-│       │   │   ├── problems.ts             # ★問題集の CRUD・実務→問題変換
-│       │   │   ├── assignments.ts          # ★演習の割り当てと進捗
-│       │   │   └── org.ts                  # ★ダッシュボード・メンバー・評価レポート
+│       │   │   ├── problems.ts             # ◇問題集（v0.2）
+│       │   │   ├── assignments.ts          # ◇演習の割り当て（v0.2）
+│       │   │   └── org.ts                  # ◇組織ダッシュボード（v0.2）
 │       │   ├── middleware/
-│       │   │   ├── auth.ts                 # ★トークン検証・認証コンテキスト構築
-│       │   │   ├── authorize.ts            # ★ロール別の閲覧範囲制御 (NFR-S6)
-│       │   │   ├── audit-log.ts            # ★監査ログ (NFR-S9)
-│       │   │   ├── rate-limit.ts           # レート制限 (NFR-O3)
-│       │   │   └── error-handler.ts
+│       │   │   ├── auth.ts                 # JWT 検証・認証コンテキスト構築
+│       │   │   ├── validate.ts             # Zod による入力検証 (F05)
+│       │   │   ├── rate-limit.ts           # レート制限・連打防止 (F04)
+│       │   │   ├── cost-log.ts             # 1 リクエスト単価のログ出力 (F11)
+│       │   │   ├── error-handler.ts        # 異常系の統一処理 (F12)
+│       │   │   ├── authorize.ts            # ◇ロール別の閲覧制御（v0.2）
+│       │   │   └── audit-log.ts            # ◇監査ログ（v0.2）
 │       │   └── services/
 │       │       ├── session-service.ts      # core / llm / datastore を束ねる層
-│       │       ├── stats-service.ts        # ★member_stats の更新 (ADR-011)
-│       │       └── evaluation-service.ts   # ★評価レポートの組み立て
+│       │       ├── stats-service.ts        # ◇member_stats の更新（v0.2）
+│       │       └── evaluation-service.ts   # ◇評価レポート（v0.2）
 │       ├── build.mjs                       # esbuild バンドル + ZIP 生成 (ADR-008)
 │       ├── zip-package.json                # ZIP に同梱する最小 package.json
 │       └── package.json
+│       #  ◇ = v0.2 以降。v0.1 では作らない
 │
 ├── packages/
-│   ├── shared/                   # ★ FE/BE 共有の型と Zod スキーマ（＝API 契約）
+│   ├── shared/                   # ★ 型と Zod スキーマ（＝API 契約・入力検証）
 │   │   └── src/
 │   │       ├── schemas/                    # Zod スキーマ
 │   │       └── types/                      # 公開型（診断・正解は存在しない）
 │   │
 │   ├── core/                     # ★ ドメインロジック（外部依存なし・純関数）
 │   │   └── src/
-│   │       ├── gate-machine.ts             # ★A/B/C のゲート遷移規則
+│   │       ├── gate-machine.ts             # A/B/C のゲート遷移規則
 │   │       ├── stage-machine.ts            # Lv1〜Lv5 の遷移規則
 │   │       ├── scoring.ts                  # スコア算出（LLM 非依存, NFR-Q4）
-│   │       ├── normalization.ts            # ★難易度正規化・成長率・time_index
 │   │       ├── hint-policy.ts              # ヒント開放条件
 │   │       ├── leak-guard.ts               # 答え漏洩の検出ルール
-│   │       ├── masking.ts                  # 秘匿情報マスキング (FR-11)
-│   │       ├── anonymize.ts                # ★実務→問題集の匿名化 (FR-35)
-│   │       ├── stats-merge.ts              # ★member_stats の再計算（純関数）
-│   │       └── session-id.ts               # ULID 生成（サブキーの時系列ソート用）
+│   │       ├── masking.ts                  # 秘匿情報マスキング (F05)
+│   │       ├── session-id.ts               # ULID 生成（サブキーの時系列ソート用）
+│   │       ├── normalization.ts            # ◇難易度正規化・成長率（v0.2）
+│   │       ├── anonymize.ts                # ◇実務→問題集の匿名化（v0.2）
+│   │       └── stats-merge.ts              # ◇member_stats の再計算（v0.2）
 │   │
 │   ├── llm/                      # ★ OrcaRouter クライアントとプロンプト
 │   │   └── src/
 │   │       ├── orca-client.ts              # OpenAI SDK の baseURL 差し替え
-│   │       ├── models.ts                   # 用途別モデル設定 / フォールバック
-│   │       ├── diagnoser.ts                # 内部診断
-│   │       ├── hinter.ts                   # ★Gate A のヒント生成
-│   │       ├── questioner.ts               # Gate B の出題
-│   │       ├── judge.ts                    # 回答判定・到達判定
-│   │       ├── revealer.ts                 # ★Gate C の解説生成
-│   │       ├── reporter.ts                 # 振り返り生成
+│   │       ├── models.ts                   # 用途別モデル設定 / フォールバック (F03)
+│   │       ├── pricing.ts                  # ★モデル別単価とコスト算出 (F11)
+│   │       ├── mock.ts                     # ★MOCK_MODE の固定応答 (ADR-014)
+│   │       ├── diagnoser.ts                # 内部診断（高品質モデル）
+│   │       ├── hinter.ts                   # Gate A のヒント生成（安価）
+│   │       ├── questioner.ts               # Gate B の出題（安価）
+│   │       ├── judge.ts                    # 到達判定（安価）
+│   │       ├── revealer.ts                 # Gate C の解説生成（高品質）
+│   │       ├── reporter.ts                 # 振り返り生成（高品質）
 │   │       └── prompts/                    # プロンプトテンプレート
 │   │
 │   └── datastore/                # ★ enebular データストアのリポジトリ層
 │       └── src/
 │           ├── client.ts                   # CloudDataStoreClient のラッパ
 │           ├── tables.ts                   # テーブル ID を環境変数から解決
-│           ├── owner.ts                    # ★OwnerId / TenantId のブランド型 (ADR-010)
+│           ├── owner.ts                    # OwnerId のブランド型（v0.2 で tenant 対応）
+│           ├── user-repo.ts                # ★users（簡易ログイン）
 │           ├── session-repo.ts             # sessions
 │           ├── secret-repo.ts              # session_secrets（★非公開）
 │           ├── report-repo.ts              # reports
-│           ├── org-repo.ts                 # ★org_directory
-│           ├── stats-repo.ts               # ★member_stats
-│           ├── assignment-repo.ts          # ★assignments
-│           ├── problem-repo.ts             # ★question_bank
-│           └── ops-repo.ts                 # ops_logs
+│           ├── ops-repo.ts                 # ops_logs（コストログ）
+│           ├── org-repo.ts                 # ◇org_directory（v0.2）
+│           ├── stats-repo.ts               # ◇member_stats（v0.2）
+│           ├── assignment-repo.ts          # ◇assignments（v0.2）
+│           └── problem-repo.ts             # ◇question_bank（v0.2）
 │
 └── .github/
     └── workflows/
@@ -533,29 +667,30 @@ v1 は**素直な実装**で進め、実測してから最適化を判断する�
 | `MODEL_QUESTIONER` | 出題に使うモデル ID（高速・安価） |
 | `MODEL_JUDGE` | 判定に使うモデル ID（高速・安価） |
 | `MODEL_FALLBACK` | 上記が失敗したときの退避先 (NFR-O1) |
-| `DS_TABLE_SESSIONS` | データストアのテーブル ID（UUID） |
+| `MODEL_MAX_TOKENS_*` | 役割別の `max_tokens`（[cost-model.md §3](cost-model.md#3-max_tokens-の設定f04)） |
+| `DS_TABLE_USERS` | データストアのテーブル ID（UUID） |
+| `DS_TABLE_SESSIONS` | 同上 |
 | `DS_TABLE_SECRETS` | 同上（★非公開テーブル） |
 | `DS_TABLE_REPORTS` | 同上 |
-| `DS_TABLE_ORG_DIRECTORY` | 同上（組織設定・メンバー） |
-| `DS_TABLE_MEMBER_STATS` | 同上（事前集計） |
-| `DS_TABLE_ASSIGNMENTS` | 同上（演習の割り当て） |
-| `DS_TABLE_QUESTION_BANK` | 同上（社内問題集） |
-| `DS_TABLE_OPS_LOGS` | 同上 |
+| `DS_TABLE_OPS_LOGS` | 同上（コストログ） |
 | `SESSION_TOKEN_BUDGET` | 1 セッションの LLM トークン上限（既定 80000, NFR-C1） |
-| `AUTH_ISSUER` | OIDC の issuer URL |
-| `AUTH_CLIENT_ID` / `AUTH_CLIENT_SECRET` | OIDC クライアント資格情報 |
 | `SESSION_JWT_SECRET` | セッション Cookie（JWT）の署名鍵 |
-| `ALLOWED_ORIGIN` | CORS 許可オリジン（Vercel の URL） |
+| `INVITE_CODE` | サインアップに必要な招待コード（[security.md §5](security.md#5-認証v01-の簡易実装)） |
+| **`MOCK_MODE`** | `true` で LLM を呼ばず固定応答（ADR-014） |
+| `USD_JPY_RATE` | コストログの円換算レート（既定 150） |
 | `LOG_LEVEL` | `@uhuru/enebular-sdk` のログレベル |
+
+**v0.2 で追加予定**: `DS_TABLE_ORG_DIRECTORY` / `DS_TABLE_MEMBER_STATS` /
+`DS_TABLE_ASSIGNMENTS` / `DS_TABLE_QUESTION_BANK` / `AUTH_ISSUER` /
+`AUTH_CLIENT_ID` / `AUTH_CLIENT_SECRET` / `ALLOWED_ORIGIN`
 
 > データストアへの認証情報は**実行環境が自動的に注入**するため、
 > アプリ側でアクセスキーを持つ必要はない（`connectDataStore` を有効にすること）。
 
-### フロントエンド（Vercel）
+### フロントエンド
 
-| 変数 | 用途 |
-|---|---|
-| `NEXT_PUBLIC_API_BASE_URL` | enebular HTTP トリガーの URL |
+**環境変数を持たない。** 同一オリジン配信（ADR-012）のため、
+API は相対パス `/v1/...` で呼べる。`ALLOWED_ORIGIN` も不要。
 
 ### GitHub Actions Secrets
 
@@ -572,10 +707,11 @@ v1 は**素直な実装**で進め、実測してから最適化を判断する�
 
 | コンポーネント | デプロイ先 | 方法 |
 |---|---|---|
-| `apps/web` | Vercel | GitHub 連携による自動デプロイ |
-| `apps/function` | enebular クラウド実行環境 | GitHub Actions → `@uhuru/enebular-cli` → ZIP |
+| `apps/function` + `apps/web` | enebular クラウド実行環境 | GitHub Actions → `@uhuru/enebular-cli` → ZIP |
 | データストア | enebular データストア | コンソールでテーブルを作成し、テーブル ID を `envVars` に設定 |
 
-環境は **development / production の 2 プロジェクト**を用意し、
-`main` ブランチへの push で development、タグ push で production にデプロイする。
+**フロントエンドは ZIP に同梱されるため、デプロイ先は 1 つだけ**（ADR-012）。
+
+v0.1 は **development の 1 プロジェクトのみ**とする（F19 Won't）。
+`main` への push で自動デプロイする。production 環境の分離は v0.2。
 詳細は [deployment.md](deployment.md)。

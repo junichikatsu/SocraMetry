@@ -7,6 +7,12 @@
 | 主な変更 | **BtoB 化に伴いテナント設計を導入。** 組織 / メンバー / 問題集 / 割り当て / 集計の 4 テーブルを追加（計 8 テーブル） |
 | 参照 | [データストア概要](https://docs.enebular.com/ja/datastore/overview) / [@uhuru/enebular-sdk](https://www.npmjs.com/package/@uhuru/enebular-sdk) |
 
+> ⚠️ **v0.1 の実装対象は 5 テーブル**（`users` / `sessions` / `session_secrets` / `reports` / `ops_logs`）。
+> `org_directory` / `member_stats` / `assignments` / `question_bank` と
+> テナント分離（§6）は **v0.2 以降**（F16 Won't）。
+> `ownerId` は v0.1 では `usr_<id>`、v0.2 で `<tenantId>:<memberId>` に拡張する。
+> 詳細は [scope-v0.1.md §4.4](scope-v0.1.md#44-データストアのテーブルを-5-つに絞る)。
+
 ---
 
 ## 1. データストアの性質と、そこから来る設計方針

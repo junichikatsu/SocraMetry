@@ -12,17 +12,22 @@
 
 | コンポーネント | デプロイ先 | 方法 |
 |---|---|---|
-| `apps/function` | enebular クラウド実行環境（ZIP） | GitHub Actions → `@uhuru/enebular-cli` |
-| `apps/web` | Vercel | GitHub 連携による自動デプロイ |
+| `apps/function` **+ `apps/web`** | enebular クラウド実行環境（ZIP） | GitHub Actions → `@uhuru/enebular-cli` |
 | データストア | enebular データストア | コンソールで手動作成（テーブル ID を `envVars` へ） |
 
-環境は **development / production の 2 プロジェクト**に分ける。
+> **フロントエンドは ZIP に同梱される。デプロイ先は 1 つだけ**
+> （[ADR-012](architecture.md#adr-012-フロントエンドを関数から同一オリジンで配信する)）。
+> 別ホスティングを使わないため、バージョンずれも CORS 設定も発生しない。
 
-| ブランチ / イベント | デプロイ先 |
-|---|---|
-| `main` への push | development |
-| `v*` タグの push | production |
-| 手動実行 (`workflow_dispatch`) | 選択したプロジェクト |
+### 環境
+
+**v0.1 は development の 1 プロジェクトのみ**（F19 Won't）。
+
+| ブランチ / イベント | デプロイ先 | 版 |
+|---|---|---|
+| `main` への push | development | v0.1 |
+| `v*` タグの push | production | v0.2 以降 |
+| 手動実行 (`workflow_dispatch`) | 選択したプロジェクト | — |
 
 ---
 
@@ -54,11 +59,22 @@ apps/function/
 ├── src/index.ts          →  esbuild  →  build/index.js   (CJS / 依存を内包)
 ├── zip-package.json      →  コピー   →  build/package.json
 └── build.mjs                            build/  →  socrametry-function.zip
+
+apps/web/public/
+├── index.html            ┐
+├── styles.css            ├→ esbuild が文字列として index.js に取り込む (ADR-012)
+└── app.js                ┘
 ```
+
+> **静的ファイルは別途 ZIP に入れず、バンドルに文字列として含める。**
+> Lambda のファイルシステム読み込みが不要になり、
+> ZIP の中身は `index.js` と `package.json` の 2 つだけで済む。
 
 **`apps/function/build.mjs`（想定）**
 
 ```js
+// loader オプションで .html / .css / .js を文字列として取り込む（ADR-012）
+//   loader: { '.html': 'text', '.css': 'text' }
 import { build } from 'esbuild'
 import { cp, rm, mkdir } from 'node:fs/promises'
 import { createWriteStream } from 'node:fs'
@@ -250,9 +266,15 @@ ZIP は決定的にビルドされるため、同じコミットからは同じ 
 | 3 | ハンドラ指定が `index.handler` になっているか |
 | 4 | ZIP サイズが 250MB 以下か |
 | 5 | `connectDataStore` が有効か |
-| 6 | `envVars` に 4 つのテーブル ID と `ORCAROUTER_API_KEY` が設定されているか |
-| 7 | `ALLOWED_ORIGIN` が Vercel の本番 URL と一致しているか |
-| 8 | HTTP トリガーのパスが enebular インスタンス内で一意か |
-| 9 | `timeout` が API 仕様の想定レイテンシ（最大 20 秒）より長いか |
+| 6 | `envVars` に 5 つのテーブル ID と `ORCAROUTER_API_KEY` が設定されているか |
+| 7 | **`MOCK_MODE` が意図した値になっているか**（本番で `true` のまま公開しない） |
+| 8 | `SESSION_JWT_SECRET` と `INVITE_CODE` が既定値（`change-me`）のままでないか |
+| 9 | HTTP トリガーのパスが enebular インスタンス内で一意か |
+| 10 | `timeout` が API 仕様の想定レイテンシ（最大 20 秒）より長いか |
+| 11 | `LOG_LEVEL` が `INFO` 以下か（`DEBUG` 以上は入力内容がログに出うる） |
 
-1〜4 は CI で自動チェックする。5〜9 は初回セットアップ時と設定変更時に手動で確認する。
+1〜4 は CI で自動チェックする。5〜11 は初回セットアップ時と設定変更時に手動で確認する。
+
+> **7 と 8 は特に注意。** `MOCK_MODE=true` のまま公開すると、
+> 固定応答が返っていることに気づかないまま「動いている」と見えてしまう。
+> `INVITE_CODE` が既定値のままだと、招待コード制が実質無効になる。

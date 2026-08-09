@@ -5,7 +5,15 @@
 | ドキュメント版数 | v0.3 |
 | 更新日 | 2026-08-09 |
 | 主な変更 | **認証を導入（BtoB）。** 3 ゲート方式に合わせて問答系を再構成し、組織 / ダッシュボード / 演習割り当て / 問題集の API を追加 |
-| ホスト | enebular クラウド実行環境の HTTP トリガー URL（`NEXT_PUBLIC_API_BASE_URL`） |
+| ホスト | enebular クラウド実行環境の HTTP トリガー URL |
+
+> ⚠️ **v0.1 の実装対象は §2.1（問答）と §2.2（個人）のみ。**
+> §2.3（演習・問題集）と §2.4（組織）は **v0.2 以降**（F16 Won't）。
+> 認証は簡易版（メール + パスワード + 招待コード）で、
+> ロール・テナント・監査ログは v0.2。詳細は [scope-v0.1.md](scope-v0.1.md)。
+>
+> **v0.1 では同一オリジン配信のため CORS は不要**（[ADR-012](architecture.md#adr-012-フロントエンドを関数から同一オリジンで配信する)）。
+> フロントは相対パス `/v1/...` で API を呼ぶ。
 
 ---
 
@@ -33,9 +41,12 @@ OIDC / OAuth の認可コードフローでログインし、セッション Coo
 Set-Cookie: sm_session=<jwt>; HttpOnly; Secure; SameSite=None; Max-Age=86400; Path=/
 ```
 
-> `SameSite=None` なのは、フロント（Vercel）と API（enebular）が**別オリジン**のため。
-> `Secure` 必須。CORS は `Access-Control-Allow-Credentials: true` と
-> `Access-Control-Allow-Origin: <ALLOWED_ORIGIN>`（ワイルドカード不可）を返す。
+> **v0.1 では `SameSite=Lax`。** フロントを関数から同一オリジンで配信するため、
+> `None` にする必要がなく、CORS 設定も不要（[ADR-012](architecture.md#adr-012-フロントエンドを関数から同一オリジンで配信する)）。
+>
+> v0.2 でフロントを別ホスティングに分離する場合は `SameSite=None; Secure` が必須になり、
+> CORS で `Access-Control-Allow-Credentials: true` と
+> `Access-Control-Allow-Origin: <ALLOWED_ORIGIN>`（ワイルドカード不可）を返す必要がある。
 
 **トークンから取り出す認証コンテキスト**
 
