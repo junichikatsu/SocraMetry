@@ -1,0 +1,203 @@
+# ============================================================================
+#  SocraMetry — enebular クラウド実行環境への ZIP デプロイ
+#
+#  注意: 現在は要件定義フェーズの設計案です。apps/function の実装が入るまで
+#        トリガーは workflow_dispatch のみに絞っています。
+#        実装完了後に下の push トリガーを有効化してください。
+#
+#  仕様: docs/deployment.md
+# ============================================================================
+name: Deploy function to enebular
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "デプロイ先の GitHub Environment"
+        required: true
+        type: choice
+        options:
+          - development
+          - production
+      version_name:
+        description: "enebular に記録するバージョン名"
+        required: true
+        default: "manual"
+        type: string
+      version_comment:
+        description: "バージョンコメント"
+        required: true
+        default: "Deployed from GitHub Actions"
+        type: string
+
+  # 実装完了後に有効化する:
+  # push:
+  #   branches: [main]          # → development
+  #   tags: ["v*"]              # → production
+
+concurrency:
+  # 同一環境への同時デプロイを防ぐ（enebular 側の状態が競合するため）
+  group: deploy-function-${{ github.event.inputs.environment || 'development' }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'development' }}
+    permissions:
+      contents: read
+
+    env:
+      ENEBULAR_ACCESS_KEY: ${{ secrets.ENEBULAR_ACCESS_KEY }}
+      ENEBULAR_SECRET_KEY: ${{ secrets.ENEBULAR_SECRET_KEY }}
+      PROJECT_ID: ${{ vars.ENEBULAR_PROJECT_ID }}
+      CLOUD_ID: ${{ vars.ENEBULAR_CLOUD_ID }}
+      FILE_ASSET_ID: ${{ vars.ENEBULAR_FILE_ASSET_ID }}
+      ZIP_PATH: apps/function/socrametry-function.zip
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # ── 品質ゲート: 壊れたものをデプロイしない ─────────────────
+      - name: Typecheck and test
+        run: |
+          set -euo pipefail
+          pnpm typecheck
+          pnpm test
+
+      # ── ZIP をビルド（esbuild で単一 CJS にバンドル: ADR-008）──
+      - name: Build ZIP
+        run: pnpm --filter @socrametry/function build:zip
+
+      # ── enebular の ZIP 要件を満たしているか機械的に検証 ────────
+      # 要件は docs/deployment.md §6 のチェックリスト 1〜4 に対応
+      - name: Verify ZIP layout
+        run: |
+          set -euo pipefail
+
+          if [ ! -f "$ZIP_PATH" ]; then
+            echo "::error::ZIP が生成されていません: $ZIP_PATH"
+            exit 1
+          fi
+
+          echo "--- ZIP contents ---"
+          unzip -l "$ZIP_PATH"
+
+          # (1) ルート直下に index.js と package.json があるか
+          entries="$(unzip -Z1 "$ZIP_PATH")"
+          for required in index.js package.json; do
+            if ! grep -qx "$required" <<< "$entries"; then
+              echo "::error::ZIP のルート直下に $required がありません（親フォルダで包まれている可能性）"
+              exit 1
+            fi
+          done
+
+          # (2) package.json に "type": "module" が含まれていないか
+          unzip -p "$ZIP_PATH" package.json > /tmp/zip-package.json
+          if node -e "process.exit(JSON.parse(require('fs').readFileSync('/tmp/zip-package.json','utf8')).type === 'module' ? 1 : 0)"; then
+            echo 'package.json に "type": "module" がないことを確認しました'
+          else
+            echo '::error::ZIP 内の package.json に "type": "module" が含まれています（Lambda は CommonJS 必須）'
+            exit 1
+          fi
+
+          # (3) index.js が CommonJS の exports.handler を持つか
+          if ! unzip -p "$ZIP_PATH" index.js | grep -qE 'exports\.handler|exports\[.handler.\]'; then
+            echo "::error::index.js に exports.handler が見つかりません"
+            exit 1
+          fi
+
+          # (4) サイズが 250MB 以下か
+          size_bytes="$(stat -c%s "$ZIP_PATH")"
+          echo "ZIP size: $((size_bytes / 1024 / 1024)) MB"
+          if [ "$size_bytes" -gt $((250 * 1024 * 1024)) ]; then
+            echo "::error::ZIP が 250MB を超えています"
+            exit 1
+          fi
+
+      - name: Install enebular CLI
+        run: npm install -g @uhuru/enebular-cli@1.0.0
+
+      - name: Validate credentials and settings
+        run: |
+          set -euo pipefail
+
+          # 公式ブログの注記: 値の前後に空白や改行があると認証エラーになる
+          if [ -z "${ENEBULAR_ACCESS_KEY}" ] || [ -z "${ENEBULAR_SECRET_KEY}" ]; then
+            echo "::error::GitHub Secrets の ENEBULAR_ACCESS_KEY と ENEBULAR_SECRET_KEY が必要です"
+            exit 1
+          fi
+          for name in PROJECT_ID CLOUD_ID FILE_ASSET_ID; do
+            if [ -z "${!name}" ]; then
+              echo "::error::GitHub Variables の ENEBULAR_${name} が設定されていません"
+              exit 1
+            fi
+          done
+
+      # ── ファイルアセットの中身を新しい ZIP に差し替える ──────────
+      - name: Update file asset
+        run: |
+          set -euo pipefail
+
+          enebular update file \
+            --project-id "$PROJECT_ID" \
+            --asset-id "$FILE_ASSET_ID" \
+            --file "$ZIP_PATH" \
+            --json
+
+      # ── クラウド実行環境へデプロイ ────────────────────────────
+      # ZIP デプロイなので --asset-type は flow ではなく file
+      - name: Deploy to cloud execution environment
+        run: |
+          set -euo pipefail
+
+          enebular deploy cloud \
+            --project-id "$PROJECT_ID" \
+            --cloud-id "$CLOUD_ID" \
+            --asset-id "$FILE_ASSET_ID" \
+            --asset-type file \
+            --json
+
+      # ── ロールバック用にバージョンを記録 ──────────────────────
+      - name: Create file version
+        env:
+          VERSION_NAME: ${{ github.event.inputs.version_name || github.ref_name }}
+          VERSION_COMMENT: ${{ github.event.inputs.version_comment || github.sha }}
+        run: |
+          set -euo pipefail
+
+          enebular add file-version \
+            --project-id "$PROJECT_ID" \
+            --asset-id "$FILE_ASSET_ID" \
+            --name "$VERSION_NAME" \
+            --comment "$VERSION_COMMENT ($GITHUB_SHA)" \
+            --json
+
+      # ── デプロイ後の疎通確認 ─────────────────────────────────
+      - name: Smoke test
+        if: vars.HTTP_TRIGGER_URL != ''
+        run: |
+          set -euo pipefail
+
+          # 反映まで少し待つ
+          sleep 15
+
+          status="$(curl -sS -o /tmp/health.json -w '%{http_code}' "${{ vars.HTTP_TRIGGER_URL }}/v1/health")"
+          cat /tmp/health.json
+          if [ "$status" != "200" ]; then
+            echo "::error::ヘルスチェックが $status を返しました"
+            exit 1
+          fi

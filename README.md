@@ -68,29 +68,46 @@ SocraMetry は、熟練者が無意識に行っているデバッグのプロセ
 | ドキュメント | 内容 |
 |---|---|
 | [要件定義書](docs/requirements.md) | 課題・ペルソナ・ユースケース・機能要件・非機能要件・スコープ |
-| [アーキテクチャと技術選定](docs/architecture.md) | 構成図・技術スタック・選定理由（ADR）・フォルダ構成 |
+| [アーキテクチャと技術選定](docs/architecture.md) | 構成図・技術スタック・選定理由（ADR 9 件）・キャパシティ試算・フォルダ構成 |
 | [ソクラテス式エンジン仕様](docs/socratic-engine.md) | 二層 LLM 構成・出題ロジック・答え漏洩ガード・スコアリング |
-| [データモデル](docs/data-model.md) | ER 図・テーブル定義・匿名セッションの設計 |
-| [API 仕様](docs/api-spec.md) | エンドポイント一覧・リクエスト / レスポンス・SSE |
-| [ロードマップ](docs/roadmap.md) | マイルストーンと受け入れ条件 |
+| [データモデル](docs/data-model.md) | データストアのキー設計・アイテム定義・冪等性 |
+| [API 仕様](docs/api-spec.md) | エンドポイント一覧・リクエスト / レスポンス・冪等性 |
+| [デプロイ](docs/deployment.md) | ZIP の作り方・enebular セットアップ・GitHub Actions |
+| [ロードマップ](docs/roadmap.md) | マイルストーンと受け入れ条件・リスク |
 
 ## 技術スタック
 
 | レイヤ | 採用 |
 |---|---|
-| フロントエンド | Next.js 15 (App Router) / TypeScript / Tailwind CSS |
-| バックエンド | Hono (Node.js 22+) / TypeScript |
-| LLM ゲートウェイ | **OrcaRouter**（必須・OpenAI 互換） |
-| データベース | PostgreSQL / Prisma |
+| フロントエンド | Next.js 15 (App Router) / TypeScript / Tailwind CSS / Vercel |
+| バックエンド | **enebular クラウド実行環境**（ZIP / Node.js 22.x）+ Hono / TypeScript |
+| データストア | **enebular データストア**（`@uhuru/enebular-sdk`） |
+| LLM ゲートウェイ | **OrcaRouter**（OpenAI 互換） |
+| CI / CD | GitHub Actions + `@uhuru/enebular-cli`（ZIP デプロイ自動化） |
 | モノレポ | pnpm workspaces + Turborepo |
 
-> LLM へのアクセスは**すべて OrcaRouter 経由**に統一します。API キーはバックエンドにのみ保持し、
-> フロントエンドから LLM を直接叩くことはありません。詳細は [architecture.md](docs/architecture.md) 参照。
+> LLM へのアクセスは**すべて OrcaRouter 経由**に統一します。API キーはクラウド実行環境の
+> 環境変数にのみ保持し、フロントエンドから LLM を直接叩くことはありません。
+
+### enebular 前提で設計が変わった点
+
+バックエンドを enebular に載せることで、次の 4 点が設計の前提になっています。
+詳細は [architecture.md §2](docs/architecture.md#2-enebular-採用にともなう-4-つの制約)。
+
+| 制約 | 設計への影響 |
+|---|---|
+| 実行環境は AWS Lambda ベースで**レスポンスをバッファする**（ストリーミング不可） | SSE を廃止。**内部診断を別リクエストに分離**し、ユーザーが最初の問題を考えている間に裏で走らせる |
+| データストアは**メインキー + サブキー**の KV（JOIN・二次インデックスなし） | リレーショナル設計を破棄し、アクセスパターン起点のキー設計へ。`sessionId` に ULID を使い、辞書順 = 時系列順にする |
+| ZIP は**ルート直下に CommonJS の `index.js`** が必要 | pnpm の symlink が載らないため、**esbuild で単一 CJS にバンドル**する |
+| データストアのアクセス回数に月次上限がある | 1 セッションを少数アイテムに集約。フリー枠は**約 185 セッション / 月**と試算 |
 
 ## 現在のステータス
 
 **要件定義フェーズ。** 実装コードはまだありません。
-`apps/` `packages/` は構成を確定させるための空スケルトンです。
+`apps/` `packages/` は構成を確定させるための空スケルトンで、
+`.github/workflows/` のデプロイ定義も実装が入るまで手動実行のみに絞ってあります。
+
+次は [M1: 技術検証](docs/roadmap.md#m1-技術検証spike) から着手します。
 
 ## ライセンス
 

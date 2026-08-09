@@ -16,7 +16,7 @@ Next.js 15 (App Router) / TypeScript / Tailwind CSS
 
 ## やらないこと
 
-- **OrcaRouter を直接呼ばない。** LLM へのアクセスはすべて `apps/api` 経由。
+- **OrcaRouter を直接呼ばない。** LLM へのアクセスはすべて `apps/function` 経由。
   API キーがフロントに露出する構成を作らないこと（NFR-S1）。
 - **答えを持たない。** `packages/shared` の公開型には正解も原因も含まれないため、
   型に従っている限り自然に守られる。

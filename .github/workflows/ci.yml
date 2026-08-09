@@ -1,0 +1,71 @@
+# ============================================================================
+#  SocraMetry — CI（型チェック / lint / テスト / ZIP ビルド検証）
+#
+#  注意: 現在は要件定義フェーズの設計案です。実装が入るまでは、
+#        pnpm-lock.yaml が存在しない場合にスキップして成功扱いにしています。
+# ============================================================================
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect implementation
+        id: detect
+        run: |
+          set -euo pipefail
+          if [ -f pnpm-lock.yaml ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::実装前のため CI をスキップします（要件定義フェーズ）"
+          fi
+
+      - name: Set up pnpm
+        if: steps.detect.outputs.ready == 'true'
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        if: steps.detect.outputs.ready == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install dependencies
+        if: steps.detect.outputs.ready == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        if: steps.detect.outputs.ready == 'true'
+        run: pnpm typecheck
+
+      - name: Lint
+        if: steps.detect.outputs.ready == 'true'
+        run: pnpm lint
+
+      # packages/core の純関数テスト。LeakGuard の回帰テスト 50 ケースを含む（NFR-Q1）
+      - name: Test
+        if: steps.detect.outputs.ready == 'true'
+        run: pnpm test
+
+      # デプロイ前に壊れていないか、ビルドだけ通しておく
+      - name: Build ZIP (dry run)
+        if: steps.detect.outputs.ready == 'true'
+        run: pnpm --filter @socrametry/function build:zip
