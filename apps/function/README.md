@@ -8,7 +8,8 @@ Node.js 22.x / TypeScript / Hono / ZIP デプロイ
 ## 責務
 
 - HTTP トリガー配下のルーティングとエンドポイント提供（[API 仕様](../../docs/api-spec.md)）
-- 匿名 ID Cookie の発行と解決、CORS
+- 認証（OIDC / OAuth）とセッション Cookie、CORS
+- **テナント分離とロール別の閲覧範囲制御**（NFR-S5 / NFR-S6）
 - レート制限・トークン予算の管理
 - `packages/core` / `llm` / `datastore` を束ねるユースケース層
 
@@ -19,9 +20,10 @@ src/
 ├── index.ts              exports.handler（hono/aws-lambda の handle()）
 ├── app.ts                Hono アプリ本体
 ├── local.ts              ローカル起動（@hono/node-server）— Lambda なしで開発
-├── routes/               sessions / diagnose / answers / hints / reports
-├── middleware/           anonymous-id / rate-limit / error-handler
-└── services/             session-service（core・llm・datastore のオーケストレーション）
+├── routes/               sessions / diagnose / hints / advance / answers /
+│                         reveal / reports / problems / assignments / org
+├── middleware/           auth / authorize / audit-log / rate-limit / error-handler
+└── services/             session-service / stats-service / evaluation-service
 
 build.mjs                 esbuild バンドル + ZIP 生成
 zip-package.json          ZIP に同梱する最小 package.json
@@ -47,11 +49,14 @@ pnpm の `node_modules` は symlink 構造でそのままでは載らないた�
 | # | ルール |
 |---|---|
 | 1 | `ORCAROUTER_API_KEY` はクラウド実行環境の `envVars` にのみ存在する |
-| 2 | `session_secrets` テーブル（＝答えと正解）をレスポンスに含めない。`routes/` から直接参照しない |
-| 3 | LLM の生成文をユーザーに返す前に、必ず LeakGuard を通す |
-| 4 | ユーザー入力は保存前・LLM 送信前にマスキングする（FR-13） |
-| 5 | 状態を変えるエンドポイントは冪等にする（FR-17）。データストアにトランザクションはない |
+| 2 | `session_secrets`（＝答えと正解）を **Gate C 到達前**のレスポンスに含めない。`routes/` から直接参照しない |
+| 3 | Gate A・B の生成文をユーザーに返す前に、必ず LeakGuard を通す |
+| 4 | ユーザー入力は保存前・LLM 送信前にマスキングする（FR-11） |
+| 5 | 状態を変えるエンドポイントは冪等にする（FR-14）。データストアにトランザクションはない |
 | 6 | 1 リクエストで LLM を 2 回以上直列に呼ばない（NFR-C5 / タイムアウト対策） |
+| 7 | **`tenantId` は認証済みトークンからのみ取得する。** リクエストパラメータから受け取らない（NFR-S5） |
+| 8 | データストアのキーは `OwnerId` / `TenantId` のブランド型でのみ組み立てる（ADR-010） |
+| 9 | **`GET /report` は冪等にする。** ここで `member_stats` を更新するため、二重実行すると評価データが壊れる |
 
 ## コマンド（予定）
 

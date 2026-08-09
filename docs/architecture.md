@@ -2,10 +2,10 @@
 
 | 項目 | 内容 |
 |---|---|
-| ドキュメント版数 | v0.2 |
+| ドキュメント版数 | v0.3 |
 | 更新日 | 2026-08-09 |
-| 主な変更 | バックエンドを **enebular クラウド実行環境（ZIP デプロイ）+ enebular データストア** に変更 |
-| 関連 | [要件定義書](requirements.md) / [ソクラテス式エンジン仕様](socratic-engine.md) / [デプロイ](deployment.md) |
+| 主な変更 | **BtoB 化。** テナント分離（ADR-010）、事前集計（ADR-011）、認証（ADR-004 改訂）を追加。キャパシティ試算をエンタープライズ前提に更新 |
+| 関連 | [要件定義書](requirements.md) / [評価モデル](evaluation-model.md) / [ソクラテス式エンジン仕様](socratic-engine.md) / [デプロイ](deployment.md) |
 
 ---
 
@@ -21,7 +21,7 @@
 │  └────────────────────────────────────────────────────────┘  │
 └───────────────────────────┬──────────────────────────────────┘
                             │ HTTPS / JSON（バッファ応答・ストリーミング不可）
-                            │ Cookie: sm_anon
+                            │ Cookie: sm_session (JWT)
                             ▼
 ┌──────────────────────────────────────────────────────────────┐
 │  enebular クラウド実行環境（ZIP / Node.js 22.x / AWS Lambda）  │
@@ -137,20 +137,61 @@ Questioner には結論（`rootCause`）を渡さず、着目点（`focusHints`�
 
 ---
 
-### ADR-004: 認証なしで始め、後から載せられるデータ設計にする
+### ADR-004: 認証を v1 の必須要件とする（BtoB 化に伴う改訂）
 
-**決定**: v1 は Cookie の匿名 ID (`sm_anon`) のみ。データストアの `sessions` テーブルの
-**メインキーを `ownerId`** とし、v1 では `anon#<uuid>`、v2 では `user#<userId>` を入れる。
+**決定**: v1 から認証（OIDC / OAuth）を必須とする。
+データストアのメインキーは `ownerId = "<tenantId>:<memberId>"`。
+
+**改訂の経緯**: 当初は「ログインを挟むと入口で落ちる」ことを理由に匿名利用で始める設計だった。
+しかし提供形態が **BtoB（組織単位の仕組みとして導入）**に確定し、
+**人事評価の根拠として使う**ことが主目的になったため、前提が変わった。
 
 **理由**:
-- 「実務で今困っているエラーを投げる」体験は、ログインを挟むと入口で落ちる
-- 一方で履歴とスコア推移にはデータストアが要る（→ 認証なし・データストアあり）
-- メインキーを最初から `ownerId` という**抽象化した名前**にしておくことで、
-  認証追加時にキー設計を変えずに済む
+- 評価に使うには**誰のデータかが確定していなければならない**。匿名では成立しない
+- 組織・ロール・チームの概念が必要になり、テナント分離（NFR-S5）が必須になった
+- 業務コードとエラーログという機微な資産を扱うため、認証は導入企業側の要件でもある
 
-**移行**: ログイン成功時、`anon#<uuid>` の全アイテムを読み出し、
-`ownerId = user#<userId>` で put し直す（データストアにキー変更操作はないため、
-**read → put → delete の 3 手**になる）。詳細は [data-model.md](data-model.md#6-認証追加時の移行v2)。
+**トレードオフ**: 入口の摩擦が増える。ただし BtoB では**組織が SSO を用意している**ことが多く、
+個人利用ほどの障壁にはならない。導入前の体験用に `tenantId = "demo"` の
+匿名モードを残す選択肢は保持する（[data-model.md §6](data-model.md#6-テナント分離の強制nfr-s5)）。
+
+---
+
+### ADR-010: テナント分離をキー設計とブランド型で強制する
+
+**決定**: すべてのメインキーの先頭に `tenantId` を含め、
+リポジトリ層は生の `string` ではなくブランド型 `OwnerId` / `TenantId` のみを受け取る。
+`tenantId` は**認証済みトークンからのみ**取得し、リクエストパラメータからは受け取らない。
+
+**理由**:
+- BtoB では**他社のデータが 1 件でも漏れたら事業が終わる**。運用ルールでは守れない
+- キーの先頭に `tenantId` があれば、別組織のデータは**メインキーが一致せず、
+  クエリしても 0 件しか返らない**。実装ミスがあっても
+  「情報漏洩」ではなく「データが見つからない」に着地する
+- ブランド型により、`ownerId` を文字列連結で作るコードが**コンパイルを通らない**
+
+**却下案**: アプリケーション層でのフィルタリング。
+`WHERE tenant_id = ?` を書き忘れた 1 箇所で破綻するため。
+**忘れられる防御は防御ではない。**
+
+---
+
+### ADR-011: ダッシュボードの集計をセッション完了時に事前計算する
+
+**決定**: `member_stats` テーブルを設け、セッション完了時に更新する。
+ダッシュボード閲覧時は `query` 1 回で読むだけにする。
+
+**理由**:
+- **enebular データストアに集計機能（COUNT / AVG / GROUP BY）がない**
+- 閲覧時に集計すると、メンバー 20 名 × セッション 40 件 = **800 アクセス**が
+  ダッシュボードを開くたびに発生する。E4（アクセス枠）とレイテンシの両方が破綻する
+- 事前計算により **1 アクセス**で済む（[data-model.md A6](data-model.md#なぜこのキーなのか--アクセスパターン対応表)）
+
+**トレードオフ**:
+- 集計値は**キャッシュであり真実の源ではない**。並行更新で欠損しうる
+- そのため `reports` テーブルから**再構築できる設計**にしておく
+- レポート生成（`GET /report`）を冪等にしないと二重加算で**評価データが壊れる**ため、
+  ここは特に慎重に実装する
 
 ---
 
@@ -158,6 +199,7 @@ Questioner には結論（`rootCause`）を渡さず、着目点（`focusHints`�
 
 **決定**: 原因（`rootCause`）と各設問の正解（`correctOptionId`）を
 `sessions` に入れず、**`session_secrets` テーブル**に分離する。
+開示（Gate C）は `POST /reveal` と `GET /report` でのみ行う。
 
 **理由**:
 - データストアの `getItem` は**アイテム全体を返す**ため、リレーショナル DB の
@@ -277,7 +319,8 @@ SocraMetry/
 ├── docs/                         # ★ 要件定義・設計ドキュメント
 │   ├── requirements.md           #   要件定義書
 │   ├── architecture.md           #   本書：構成・技術選定・ADR
-│   ├── socratic-engine.md        #   対話エンジン仕様（プロンプト設計）
+│   ├── evaluation-model.md       #   ★評価モデル（スコア・公平性・レポート）
+│   ├── socratic-engine.md        #   対話エンジン仕様（3 ゲート・プロンプト設計）
 │   ├── data-model.md             #   データストアのキー設計・アイテム定義
 │   ├── api-spec.md               #   API 仕様
 │   ├── deployment.md             #   ZIP デプロイと GitHub Actions
@@ -287,16 +330,22 @@ SocraMetry/
 │   ├── web/                      # ★ フロントエンド (Next.js 15 / Vercel)
 │   │   ├── app/
 │   │   │   ├── page.tsx                    # ランディング / エラー投稿
-│   │   │   ├── sessions/[id]/page.tsx      # 問答画面（コア体験）
+│   │   │   ├── sessions/[id]/page.tsx      # 問答画面（3 ゲート）
 │   │   │   ├── sessions/[id]/report/       # 振り返りレポート
-│   │   │   └── history/                    # セッション履歴・スコア推移
+│   │   │   ├── me/                         # 個人ダッシュボード・履歴
+│   │   │   ├── assignments/                # 割り当てられた演習
+│   │   │   └── org/                        # ★組織ダッシュボード・問題集・メンバー
 │   │   ├── components/
 │   │   │   ├── error-input/                # エラー貼り付けフォーム
-│   │   │   ├── question-card/              # 質問 + 選択肢
+│   │   │   ├── hint-panel/                 # Gate A: ヒント表示と段階開放
+│   │   │   ├── question-card/              # Gate B: 設問 + 選択肢
+│   │   │   ├── reveal-panel/               # Gate C: 解説 + 振り返り 1 問
+│   │   │   ├── gate-progress/              # A/B/C の現在地
 │   │   │   ├── stage-progress/             # Lv1〜Lv5 のプログレス
 │   │   │   ├── thinking-mentor/            # 「先輩が考えている」演出 (ADR-007)
-│   │   │   ├── hint-button/                # ヒント段階開放
-│   │   │   └── score-radar/                # デバッグ脳スコア（5 軸）
+│   │   │   ├── score-radar/                # デバッグ脳スコア（5 軸）
+│   │   │   ├── growth-chart/               # 成長率の推移
+│   │   │   └── org-insight/                # 組織の弱点サマリ
 │   │   ├── lib/
 │   │   │   ├── api-client.ts               # HTTP トリガーへの型付きクライアント
 │   │   │   └── diagnose-trigger.ts         # ADR-006 の先行診断キック
@@ -310,15 +359,24 @@ SocraMetry/
 │       │   ├── routes/
 │       │   │   ├── sessions.ts             # 作成 / 取得 / 削除
 │       │   │   ├── diagnose.ts             # 先行診断 (ADR-006)
-│       │   │   ├── answers.ts              # 回答受付・次問返却
-│       │   │   ├── hints.ts                # ヒント開放
-│       │   │   └── reports.ts              # レポート・統計
+│       │   │   ├── hints.ts                # Gate A: ヒント開放
+│       │   │   ├── advance.ts              # Gate A → B
+│       │   │   ├── answers.ts              # Gate B: 回答受付・次問返却
+│       │   │   ├── reveal.ts               # Gate C: 開示 + 振り返り
+│       │   │   ├── reports.ts              # レポート・個人統計
+│       │   │   ├── problems.ts             # ★問題集の CRUD・実務→問題変換
+│       │   │   ├── assignments.ts          # ★演習の割り当てと進捗
+│       │   │   └── org.ts                  # ★ダッシュボード・メンバー・評価レポート
 │       │   ├── middleware/
-│       │   │   ├── anonymous-id.ts         # 匿名 ID Cookie の発行 / 解決
+│       │   │   ├── auth.ts                 # ★トークン検証・認証コンテキスト構築
+│       │   │   ├── authorize.ts            # ★ロール別の閲覧範囲制御 (NFR-S6)
+│       │   │   ├── audit-log.ts            # ★監査ログ (NFR-S9)
 │       │   │   ├── rate-limit.ts           # レート制限 (NFR-O3)
 │       │   │   └── error-handler.ts
 │       │   └── services/
-│       │       └── session-service.ts      # core / llm / datastore を束ねる層
+│       │       ├── session-service.ts      # core / llm / datastore を束ねる層
+│       │       ├── stats-service.ts        # ★member_stats の更新 (ADR-011)
+│       │       └── evaluation-service.ts   # ★評価レポートの組み立て
 │       ├── build.mjs                       # esbuild バンドル + ZIP 生成 (ADR-008)
 │       ├── zip-package.json                # ZIP に同梱する最小 package.json
 │       └── package.json
@@ -331,11 +389,15 @@ SocraMetry/
 │   │
 │   ├── core/                     # ★ ドメインロジック（外部依存なし・純関数）
 │   │   └── src/
+│   │       ├── gate-machine.ts             # ★A/B/C のゲート遷移規則
 │   │       ├── stage-machine.ts            # Lv1〜Lv5 の遷移規則
-│   │       ├── scoring.ts                  # デバッグ脳スコア算出
+│   │       ├── scoring.ts                  # スコア算出（LLM 非依存, NFR-Q4）
+│   │       ├── normalization.ts            # ★難易度正規化・成長率・time_index
 │   │       ├── hint-policy.ts              # ヒント開放条件
 │   │       ├── leak-guard.ts               # 答え漏洩の検出ルール
-│   │       ├── masking.ts                  # 秘匿情報マスキング (FR-13)
+│   │       ├── masking.ts                  # 秘匿情報マスキング (FR-11)
+│   │       ├── anonymize.ts                # ★実務→問題集の匿名化 (FR-35)
+│   │       ├── stats-merge.ts              # ★member_stats の再計算（純関数）
 │   │       └── session-id.ts               # ULID 生成（サブキーの時系列ソート用）
 │   │
 │   ├── llm/                      # ★ OrcaRouter クライアントとプロンプト
@@ -343,8 +405,10 @@ SocraMetry/
 │   │       ├── orca-client.ts              # OpenAI SDK の baseURL 差し替え
 │   │       ├── models.ts                   # 用途別モデル設定 / フォールバック
 │   │       ├── diagnoser.ts                # 内部診断
-│   │       ├── questioner.ts               # 出題
+│   │       ├── hinter.ts                   # ★Gate A のヒント生成
+│   │       ├── questioner.ts               # Gate B の出題
 │   │       ├── judge.ts                    # 回答判定・到達判定
+│   │       ├── revealer.ts                 # ★Gate C の解説生成
 │   │       ├── reporter.ts                 # 振り返り生成
 │   │       └── prompts/                    # プロンプトテンプレート
 │   │
@@ -352,10 +416,15 @@ SocraMetry/
 │       └── src/
 │           ├── client.ts                   # CloudDataStoreClient のラッパ
 │           ├── tables.ts                   # テーブル ID を環境変数から解決
-│           ├── session-repo.ts             # sessions テーブル
+│           ├── owner.ts                    # ★OwnerId / TenantId のブランド型 (ADR-010)
+│           ├── session-repo.ts             # sessions
 │           ├── secret-repo.ts              # session_secrets（★非公開）
-│           ├── report-repo.ts              # reports テーブル
-│           └── ops-repo.ts                 # ops_logs テーブル
+│           ├── report-repo.ts              # reports
+│           ├── org-repo.ts                 # ★org_directory
+│           ├── stats-repo.ts               # ★member_stats
+│           ├── assignment-repo.ts          # ★assignments
+│           ├── problem-repo.ts             # ★question_bank
+│           └── ops-repo.ts                 # ops_logs
 │
 └── .github/
     └── workflows/
@@ -380,19 +449,42 @@ packages/datastore ──▶ packages/shared
 
 ## 6. キャパシティ試算
 
-enebular の利用制限のうち、**どれが最初に効いてくるか**を見積もる。
-1 セッション = Lv1〜Lv5 で計 12 ターン、ヒント 2 回、レポート 1 回を標準ケースとする。
+BtoB 提供のため**エンタープライズプラン前提**（A-7）。
+1 セッション = Gate A のヒント 2 回、Gate B で 12 ターン、レポート 1 回を標準ケースとする。
 
-| 資源 | 1 セッションあたりの消費（見積） | フリー枠 / 月 | 上限セッション数 / 月 | エンタープライズ枠 / 月 | 上限セッション数 / 月 |
-|---|---|---|---|---|---|
-| **データストアアクセス** | **約 54 回** | 10,000 回 | **約 185** ← ボトルネック | 3,000,000 回 | 約 55,000 |
-| HTTP リクエスト | 約 16 回 | 50,000 回 | 約 3,100 | 3,000,000 回 | 約 187,000 |
-| 実行時間 | 約 55 秒（LLM 待ちを含む） | 24 時間 | 約 1,570 | 1,000 時間 | 約 65,000 |
-| 保存データ | 約 35KB | 0.1GB | 約 2,800 | 10GB | 約 280,000 |
+### 1 セッションあたりの消費
 
-**結論: フリープランではデータストアのアクセス回数が最初に枯れる（約 185 セッション / 月）。**
+| 資源 | 消費（見積） |
+|---|---|
+| データストアアクセス | **約 58 回**（うち 4 回は `member_stats` の更新） |
+| HTTP リクエスト | 約 18 回 |
+| 実行時間 | 約 55 秒（LLM 待ちを含む） |
+| 保存データ | 約 35KB |
 
-### アクセス回数の内訳（1 ターンあたり 4 回）
+### プラン別の上限
+
+| 資源 | フリー枠 / 月 | 上限セッション | エンタープライズ枠 / 月 | 上限セッション |
+|---|---|---|---|---|
+| **データストアアクセス** | 10,000 回 | **約 170** ← ボトルネック | 3,000,000 回 | **約 51,000** |
+| HTTP リクエスト | 50,000 回 | 約 2,700 | 3,000,000 回 | 約 166,000 |
+| 実行時間 | 24 時間 | 約 1,570 | 1,000 時間 | 約 65,000 |
+| 保存データ | 0.1GB | 約 2,800 | 10GB | 約 280,000 |
+
+### 導入規模の目安（エンタープライズ）
+
+| 規模 | 想定セッション / 月 | 判定 |
+|---|---|---|
+| 20 名 × 週 2 セッション | 約 160 | ✅ 余裕 |
+| 100 名 × 週 2 セッション | 約 800 | ✅ 余裕 |
+| 500 名 × 週 3 セッション | 約 6,000 | ✅ 余裕 |
+| 1,000 名 × 毎日 1 セッション | 約 20,000 | ⚠️ 上限の 40%。要監視 |
+
+**数百名規模までは余裕がある。** 制約が効いてくるのは 1,000 名超の全社導入時。
+フリー枠は約 170 セッション / 月のため、**開発と PoC 専用**と考える。
+
+### アクセス回数の内訳
+
+**Gate B の 1 ターンあたり 4 回**
 
 | 操作 | 回数 |
 |---|---|
@@ -401,15 +493,29 @@ enebular の利用制限のうち、**どれが最初に効いてくるか**を�
 | `sessions` を書く（ターン追記・段階更新） | 1 |
 | `session_secrets` を書く（次問の正解を保存） | 1 |
 
+**セッション完了時に 4 回**（ADR-011 の代償）
+
+| 操作 | 回数 |
+|---|---|
+| `reports` に書く | 1 |
+| `member_stats` を読む | 1 |
+| `member_stats` を書く | 1 |
+| `assignments` の進捗更新（演習モードのみ） | 1 |
+
+> **この 4 回で、組織ダッシュボードが 1 アクセスで開ける。**
+> 事前計算しなければ、ダッシュボードを開くたびに数百アクセスが発生する。
+> 書き込み時に払うか、読み込み時に払うかの選択であり、
+> **ダッシュボードは繰り返し開かれる**ため書き込み時に払う方が安い。
+
 ### 削減の余地（必要になったら実施 / 未決 Q-7）
 
 | 案 | 効果 | トレードオフ |
 |---|---|---|
 | **正解を署名付きトークンでクライアントに預ける** | ターンあたり 4 → 2 回（**半減**） | サーバ鍵で AES-GCM 暗号化する実装が必要。鍵管理を誤ると答えが漏れる |
-| レポートを `sessions` アイテムに同梱する | セッションあたり −2 回 | `/me/stats` が全セッションアイテムの読み出しになり、逆に増える場合がある |
-| `ops_logs` を実行環境のログ出力に寄せる | セッションあたり −12 回 | ログサイズ枠（フリー 0.1GB）を消費する。集計はしづらくなる |
+| 演習モードの `session_secrets` を省略 | 演習セッションで −12 回 | 正解が `question_bank` にあるため実は可能。ただし `question_bank` の読み出しが増える |
+| `ops_logs` を実行環境のログ出力に寄せる | セッションあたり −14 回 | ログサイズ枠を消費する。集計はしづらくなる（v1 は既定で無効） |
 
-v1 は**素直な 4 回**で実装し、フリー枠での検証中にアクセス数を実測してから最適化を判断する。
+v1 は**素直な実装**で進め、実測してから最適化を判断する。
 先に最適化すると、答えの取り扱いという最も壊してはいけない部分を、
 計測なしで複雑にすることになるため。
 
@@ -430,9 +536,15 @@ v1 は**素直な 4 回**で実装し、フリー枠での検証中にアクセ�
 | `DS_TABLE_SESSIONS` | データストアのテーブル ID（UUID） |
 | `DS_TABLE_SECRETS` | 同上（★非公開テーブル） |
 | `DS_TABLE_REPORTS` | 同上 |
+| `DS_TABLE_ORG_DIRECTORY` | 同上（組織設定・メンバー） |
+| `DS_TABLE_MEMBER_STATS` | 同上（事前集計） |
+| `DS_TABLE_ASSIGNMENTS` | 同上（演習の割り当て） |
+| `DS_TABLE_QUESTION_BANK` | 同上（社内問題集） |
 | `DS_TABLE_OPS_LOGS` | 同上 |
 | `SESSION_TOKEN_BUDGET` | 1 セッションの LLM トークン上限（既定 80000, NFR-C1） |
-| `COOKIE_SECRET` | 匿名 ID Cookie の署名鍵 |
+| `AUTH_ISSUER` | OIDC の issuer URL |
+| `AUTH_CLIENT_ID` / `AUTH_CLIENT_SECRET` | OIDC クライアント資格情報 |
+| `SESSION_JWT_SECRET` | セッション Cookie（JWT）の署名鍵 |
 | `ALLOWED_ORIGIN` | CORS 許可オリジン（Vercel の URL） |
 | `LOG_LEVEL` | `@uhuru/enebular-sdk` のログレベル |
 
