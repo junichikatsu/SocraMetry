@@ -86,4 +86,4 @@ LLM もデータストアも呼ばない。
 `sessionId` に ULID を使うことで、**文字列としての辞書順 = 生成時刻順**になる。
 データストアはサブキーを 1 つしか持てないため、
 「サブキー = `sessionId`」だけで ID 引きと時系列ソートの両方が成立する
-（[data-model.md](../docs/data-model.md#2-テーブル一覧4-テーブル)）。
+（[data-model.md](../docs/data-model.md#2-テーブル一覧9-テーブル)）。
