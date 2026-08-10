@@ -445,17 +445,25 @@ export const handler = handle(app)
 パスでハンドラを呼ぶ。トリガーが `/socrametry` なら、Hono が受け取るのは
 `/socrametry/v1/health` であって `/v1/health` ではない。
 
-そのため `apps/function/src/app.ts` は、ルート定義を
-**「素のパス」と「`HTTP_TRIGGER_PATH` 配下」の両方にマウント**している。
+そのため `apps/function/src/app.ts` は、同じルート定義を **3 通りにマウント**している。
 
-| 経路 | 受け取るパス |
-|---|---|
-| ローカル起動（`local.ts`）・単体テスト | `/v1/health` |
-| enebular の HTTP トリガー | `/socrametry/v1/health` |
+```ts
+app.route('/', createRoutes())         // /v1/health          ローカル・テスト
+app.route('/:base', createRoutes())    // /socrametry/v1/health  トリガー経由
+app.route('/:base/', createRoutes())   // /socrametry/           トリガーのルート URL
+```
 
-**両方にマウントする理由**: 環境ごとにフロントの URL 組み立てを分岐させないため。
-トリガーパスを剥がす前処理でも実現できるが、その場合ローカルと本番で
+**先頭セグメントを環境変数で持たない。** `HTTP_TRIGGER_PATH` のような設定を置くと、
+その値とトリガーの実設定がずれた瞬間に**全リクエストが 404** になり、
+「関数は動いているのに何も応答しない」という最も切り分けにくい壊れ方をする。
+`:base` で受ければ設定自体が存在しなくなり、トリガーのパスを変えても再設定が要らない。
+
+**トリガーパスを剥がす前処理を採らなかった理由**: その場合ローカルと本番で
 「アプリが認識するパス」が変わり、ログとテストの前提がずれる。
+上の形なら、どちらの経路でも同じルートに同じパスで届く。
+
+**代償**: 任意の 1 セグメントを前置したパスでも API に届く（`/foo/v1/health` など）。
+認証はパスに依存しないため実害はないが、**セグメントを 2 つ以上前置したパスは通さない**。
 
 `event` そのものの形式（API Gateway v1 / v2 / Function URL）は `hono/aws-lambda` の
 `handle()` がそのまま解釈できており、正規化アダプタは不要だった。
@@ -689,7 +697,6 @@ v1 は**素直な実装**で進め、実測してから最適化を判断する�
 | `DS_TABLE_REPORTS` | 同上 |
 | `DS_TABLE_OPS_LOGS` | 同上（コストログ） |
 | `OPS_LOG_ENABLED` | LLM 呼び出しログを `ops_logs` に書くか。**v0.1 は `true`**（[data-model.md §3.8](data-model.md#38-ops_logs--llm-呼び出しログnfr-o2)） |
-| `HTTP_TRIGGER_PATH` | HTTP トリガーのパス（例 `/socrametry`）。トリガーはこのパスを**含めた**パスでハンドラを呼ぶため、ルートを両方にマウントする（ADR-009） |
 | `SESSION_TOKEN_BUDGET` | 1 セッションの LLM トークン上限（既定 80000, NFR-C1） |
 | `SESSION_JWT_SECRET` | セッション Cookie（JWT）の署名鍵 |
 | `INVITE_CODE` | サインアップに必要な招待コード（[security.md §5](security.md#5-認証v01-の簡易実装)） |

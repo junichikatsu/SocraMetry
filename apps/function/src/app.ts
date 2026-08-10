@@ -35,22 +35,29 @@ function createRoutes() {
 
 /**
  * enebular の HTTP トリガーは、トリガーのパス（例 `/socrametry`）を**含めた**
- * パスでハンドラを呼ぶ。一方ローカル起動やテストでは付かない。
+ * パスでハンドラを呼ぶ。一方ローカル起動やテストでは付かない（ADR-009 / 実測）。
  *
- * どちらでも動くように、ルートを「素のパス」と「トリガーパス配下」の
- * 両方にマウントする。環境ごとに URL の組み立てを変えずに済む。
+ * ルートを 3 通りにマウントして、どちらの経路でも同じルートに届くようにする。
  *
- * @param triggerPath 例 `/socrametry`。空なら素のパスにのみマウントする
+ * | マウント    | 届くパス                                   |
+ * |------------|-------------------------------------------|
+ * | `/`        | `/v1/health`（ローカル・テスト）            |
+ * | `/:base`   | `/socrametry/v1/health`（トリガー経由）      |
+ * | `/:base/`  | `/socrametry/`（トリガーのルート URL）       |
+ *
+ * **トリガーのパスを環境変数で持たない。** 設定した値とトリガーの実設定が
+ * ずれると全リクエストが 404 になり、原因が分かりにくい。
+ * 先頭セグメントを問わない形にすれば、その設定自体が要らなくなる。
  */
-export function createApp(triggerPath = process.env['HTTP_TRIGGER_PATH'] ?? '') {
-  const normalized = triggerPath.trim().replace(/\/+$/, '')
+export function createApp() {
   const app = new Hono()
 
   app.route('/', createRoutes())
-  if (normalized) app.route(normalized, createRoutes())
+  app.route('/:base', createRoutes())
+  app.route('/:base/', createRoutes())
 
   /**
-   * 受け取ったパスを返す。トリガーの実際のイベント形式が想定と違ったとき、
+   * 受け取ったパスを返す。トリガーのイベント形式が想定と違ったとき、
    * ログを掘らずにレスポンスだけで原因が分かる（FR-17 / 異常系で止まらない）。
    */
   app.notFound((c) =>
@@ -61,7 +68,6 @@ export function createApp(triggerPath = process.env['HTTP_TRIGGER_PATH'] ?? '') 
           message: 'Not Found',
           path: c.req.path,
           method: c.req.method,
-          triggerPath: normalized || null,
         },
       },
       404,
