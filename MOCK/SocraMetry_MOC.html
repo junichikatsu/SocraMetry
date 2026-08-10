@@ -98,6 +98,7 @@
       </div>
 
       <!-- Hamburger -->
+      <!-- 装飾のみ。JS の配線はしていないので押しても何も起きない -->
       <div class="px-9 py-5">
         <button
           class="flex h-12 w-12 items-center justify-center rounded-xl hover:bg-white/30"
@@ -120,9 +121,12 @@
       </div>
 
       <!-- New Chat -->
+      <!-- id="btn-new-chat" は JS から掴むためのフック。これが無いと JS が止まる -->
+      <!-- data-view は付けない（nav-item ではないので効かず、紛らわしいだけ） -->
       <div class="px-6 pt-2">
         <button
           id="btn-new-chat"
+          type="button"
           class="flex h-[82px] w-full items-center rounded-2xl bg-white px-8 text-[23px] font-medium shadow-sm transition hover:bg-slate-50 focus:outline-none focus-visible:ring-4 focus-visible:ring-[#6864d9]/40"
         >
           <span
@@ -137,9 +141,10 @@
       <!-- Navigation -->
       <nav class="mt-12 px-8">
 
+        <!-- チャット一覧：data-view を持たないので、クリックしても何も起きない -->
+        <!-- JS 側の「if (!item.dataset.view) return;」で処理が打ち切られる -->
         <button
           type="button"
-          data-view="chat"
           class="nav-item mb-7 flex w-full items-center gap-6 rounded-xl px-5 py-3 text-left text-[22px] font-medium transition hover:bg-white/20 focus:outline-none focus-visible:ring-4 focus-visible:ring-[#6864d9]/40"
         >
           <!-- chat icon -->
@@ -164,6 +169,32 @@
           チャット一覧
         </button>
 
+        <!-- トレーニングメニュー：押すとプロジェクト選択モーダルが開く -->
+        <!-- data-view は付けない。付けると showView() が呼ばれて画面が切り替わってしまう -->
+        <!-- id="btn-training" で JS から掴み、openProjectModal に配線している -->
+        <button
+          type="button"
+          id="btn-training"
+          class="nav-item mb-7 flex w-full items-center gap-6 rounded-xl px-5 py-3 text-left text-[22px] font-medium transition hover:bg-white/20 focus:outline-none focus-visible:ring-4 focus-visible:ring-[#6864d9]/40"
+        >
+          <!-- target icon -->
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="h-7 w-7"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            stroke-width="1.7"
+          >
+            <circle cx="12" cy="12" r="9" />
+            <circle cx="12" cy="12" r="5" />
+            <circle cx="12" cy="12" r="1.5" />
+          </svg>
+
+          トレーニングメニュー
+        </button>
+
+        <!-- 検索：data-view なし → 無反応 -->
         <button
           type="button"
           class="nav-item mb-7 flex w-full items-center gap-6 rounded-xl px-5 py-3 text-left text-[22px] font-medium transition hover:bg-white/20 focus:outline-none focus-visible:ring-4 focus-visible:ring-[#6864d9]/40"
@@ -184,6 +215,7 @@
           検索
         </button>
 
+        <!-- ダッシュボード：data-view="dashboard" があるので showView("dashboard") が呼ばれる -->
         <button
           type="button"
           data-view="dashboard"
@@ -204,6 +236,7 @@
           ダッシュボード
         </button>
 
+        <!-- 設定：data-view なし → 無反応 -->
         <button
           type="button"
           class="nav-item flex w-full items-center gap-6 rounded-xl px-5 py-3 text-left text-[22px] font-medium transition hover:bg-white/20 focus:outline-none focus-visible:ring-4 focus-visible:ring-[#6864d9]/40"
@@ -830,6 +863,8 @@
   <!-- ======================================== -->
   <!-- Project selection (command palette) -->
   <!-- ======================================== -->
+  <!-- 最初から DOM に存在していて、hidden で隠れているだけ -->
+  <!-- トレーニングメニューを押すと hidden が外れて前面に出る -->
   <div
     id="project-modal"
     class="fixed inset-0 z-50 hidden bg-slate-800/45 backdrop-blur-[2px]"
@@ -869,10 +904,10 @@
 
       </div>
 
-      <!-- List -->
+      <!-- List：中身は JS の renderList() が動的に作る -->
       <ul id="project-list" class="max-h-[420px] overflow-y-auto py-2"></ul>
 
-      <!-- Empty state -->
+      <!-- Empty state：検索結果が 0 件のときだけ表示 -->
       <div id="project-empty" class="hidden px-8 py-12 text-center text-[20px] text-slate-400">
         該当するプロジェクトがありません。別のキーワードで検索してください。
       </div>
@@ -891,6 +926,7 @@
   <script>
     /* ============================================================
        データ
+       ここを書き換えると、モーダルに出るプロジェクト一覧が変わる
        ============================================================ */
     const PROJECTS = [
       { name: "バックエンドAPI改修",       level: "上級",   members: 8  },
@@ -900,6 +936,7 @@
       { name: "ログ解析パイプライン",       level: "中級",   members: 5  }
     ];
 
+    // 難易度バッジの色。PROJECTS の level の文字列と対応させている
     const LEVEL_STYLE = {
       "初級":   "bg-[#e8f2fd] text-[#4a7fb5]",
       "中級":   "bg-[#e3f3f1] text-[#3f877f]",
@@ -909,14 +946,20 @@
 
 
     /* ============================================================
-       要素
+       要素の取得
+       HTML の id / class と、ここの文字列が対応している
+       （HTML と JS をつないでいるのは、この文字列だけ）
        ============================================================ */
     const viewChat      = document.getElementById("view-chat");
     const viewDashboard = document.getElementById("view-dashboard");
     const composer      = document.getElementById("composer");
     const headerBadge   = document.getElementById("header-badge");
+
+    // class="nav-item" を持つボタンを全部集める（現在5つ）
     const navItems      = document.querySelectorAll(".nav-item");
+
     const btnNewChat    = document.getElementById("btn-new-chat");
+    const btnTraining   = document.getElementById("btn-training");
 
     const chatThread    = document.getElementById("chat-thread");
     const chatEmpty     = document.getElementById("chat-empty");
@@ -934,17 +977,19 @@
 
     /* ============================================================
        画面切り替え
+       ページ遷移ではなく、section の hidden を付け外ししているだけ
        ============================================================ */
     function showView(view) {
       currentView = view;
 
       const isChat = view === "chat";
 
+      // チャットとダッシュボードを入れ替える。入力欄はチャットのときだけ出す
       viewChat.classList.toggle("hidden", !isChat);
       viewDashboard.classList.toggle("hidden", isChat);
       composer.classList.toggle("hidden", !isChat);
 
-      // ヘッダーのバッジ
+      // ヘッダーのバッジ（文言と色）
       if (isChat) {
         headerBadge.textContent = "ソクラテス対話セッション";
         headerBadge.className =
@@ -955,12 +1000,14 @@
           "rounded-full bg-[#fdeaf1] px-6 py-2 text-[19px] font-medium text-[#d8558a]";
       }
 
-      // サイドバーの選択状態
+      // サイドバーの選択状態。data-view が今の画面と一致するボタンだけ光る
       navItems.forEach(item => {
         item.classList.toggle("is-active", item.dataset.view === view);
       });
 
       // 再表示アニメーション
+      // 一度クラスを外し、offsetWidth を読んでブラウザに再計算させてから付け直す
+      // （これをしないと、同じ画面を連続で開いたときにフェードが再生されない）
       const active = isChat ? viewChat : viewDashboard;
       active.classList.remove("view-enter");
       void active.offsetWidth;
@@ -969,6 +1016,9 @@
       active.scrollTop = 0;
     }
 
+    // ナビボタンにクリック処理を付ける
+    // data-view を持たないボタン（チャット一覧・トレーニングメニュー・検索・設定）は
+    // ここで return され、showView は呼ばれない
     navItems.forEach(item => {
       if (!item.dataset.view) return;
       item.addEventListener("click", () => showView(item.dataset.view));
@@ -978,6 +1028,9 @@
     /* ============================================================
        プロジェクト選択モーダル
        ============================================================ */
+
+    // PROJECTS（または検索で絞った filtered）から <li> を作り直す
+    // ここだけは「最初から書いてある」のではなく、開くたびに生成している
     function renderList() {
       listEl.innerHTML = "";
 
@@ -1005,6 +1058,7 @@
           <span class="w-[80px] shrink-0 text-right text-[19px] text-slate-500">${p.members}名</span>
         `;
 
+        // マウスを乗せた項目を選択状態にする
         li.addEventListener("mouseenter", () => {
           activeIndex = i;
           renderList();
@@ -1015,40 +1069,51 @@
         listEl.appendChild(li);
       });
 
+      // 検索結果が 0 件なら、リストを隠して「該当なし」を出す
       const noResult = filtered.length === 0;
       listEl.classList.toggle("hidden", noResult);
       emptyEl.classList.toggle("hidden", !noResult);
     }
 
+    // トレーニングメニューから呼ばれる
     function openProjectModal() {
+      // 開く前に会話スレッドが出ていたかを覚えておく
+      // （キャンセルで閉じたときに元の画面へ戻すため）
       hadThread = !chatThread.classList.contains("hidden");
 
-      // 背景をチャットの空状態にする
+      // 背景をチャット画面の「空状態」にしておく
       showView("chat");
       chatThread.classList.add("hidden");
       chatEmpty.classList.remove("hidden");
 
+      // サイドバーの選択状態をいったん全部消し、
+      // 押されたトレーニングメニューだけを光らせる
       navItems.forEach(item => item.classList.remove("is-active"));
-      btnNewChat.classList.add("ring-4", "ring-[#6864d9]/30");
+      btnTraining.classList.add("ring-4", "ring-[#6864d9]/30");
 
+      // 一覧を初期状態（全件・先頭選択・検索欄は空）にして描き直す
       filtered = [...PROJECTS];
       activeIndex = 0;
       searchInput.value = "";
       renderList();
 
+      // モーダルを表示し、そのまま検索欄に入力できるようにする
       modal.classList.remove("hidden");
       searchInput.focus();
     }
 
+    // restore = true … キャンセルで閉じた（元の画面に戻す）
+    // restore = false … プロジェクトを選んで閉じた（戻さない）
     function closeProjectModal(restore = true) {
       modal.classList.add("hidden");
-      btnNewChat.classList.remove("ring-4", "ring-[#6864d9]/30");
+      btnTraining.classList.remove("ring-4", "ring-[#6864d9]/30");
 
       if (restore && hadThread) {
         chatEmpty.classList.add("hidden");
         chatThread.classList.remove("hidden");
       }
 
+      // サイドバーの選択状態を、いま表示中の画面に合わせ直す
       navItems.forEach(item => {
         item.classList.toggle("is-active", item.dataset.view === currentView);
       });
@@ -1058,13 +1123,15 @@
       const project = filtered[index];
       if (!project) return;
 
+      // 選んで閉じるので、元の画面には戻さない
       closeProjectModal(false);
 
-      // 選択したプロジェクトで対話セッションを開始
+      // 選んだプロジェクトで対話セッションを開始した状態にする
       chatEmpty.classList.add("hidden");
       chatThread.classList.remove("hidden");
       hadThread = true;
 
+      // ヘッダーのバッジにプロジェクト名を出す
       headerBadge.textContent = `ソクラテス対話セッション · ${project.name}`;
 
       chatThread.classList.remove("view-enter");
@@ -1072,14 +1139,38 @@
       chatThread.classList.add("view-enter");
     }
 
-    btnNewChat.addEventListener("click", openProjectModal);
 
-    // 背景クリックで閉じる
+    /* ============================================================
+       新規チャット
+       モーダルは出さず、チャット一覧（会話スレッド）を表示する
+       ダッシュボードを見ているときに押しても、showView("chat") で戻る
+       ============================================================ */
+    function openNewChat() {
+      showView("chat");
+
+      chatEmpty.classList.add("hidden");
+      chatThread.classList.remove("hidden");
+      hadThread = true;
+
+      chatThread.classList.remove("view-enter");
+      void chatThread.offsetWidth;
+      chatThread.classList.add("view-enter");
+    }
+
+
+    /* ============================================================
+       ボタンと処理の配線
+       ============================================================ */
+    btnNewChat.addEventListener("click", openNewChat);        // 新規チャット → チャット一覧
+    btnTraining.addEventListener("click", openProjectModal);  // トレーニングメニュー → プロジェクト選択
+
+    // 背景の暗い部分をクリックしたら閉じる
+    // e.target === modal は「モーダル本体（白いパネル）ではなく背景を押した」の判定
     modal.addEventListener("mousedown", e => {
       if (e.target === modal) closeProjectModal();
     });
 
-    // 検索
+    // 検索：名前と難易度の両方を対象に部分一致で絞り込む
     searchInput.addEventListener("input", () => {
       const q = searchInput.value.trim();
       filtered = PROJECTS.filter(p => (p.name + p.level).includes(q));
@@ -1089,13 +1180,14 @@
 
     // キーボード操作
     document.addEventListener("keydown", e => {
-      // どこからでも新規チャットを開く
+      // Cmd/Ctrl + K でどこからでもプロジェクト選択を開く
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         openProjectModal();
         return;
       }
 
+      // モーダルが閉じているときは、以下の操作を無視する
       if (modal.classList.contains("hidden")) return;
 
       if (e.key === "Escape") {
@@ -1104,12 +1196,14 @@
       } else if (e.key === "ArrowDown") {
         e.preventDefault();
         if (filtered.length) {
+          // 末尾まで行ったら先頭に戻る
           activeIndex = (activeIndex + 1) % filtered.length;
           renderList();
         }
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
         if (filtered.length) {
+          // 先頭より上に行ったら末尾に回る
           activeIndex = (activeIndex - 1 + filtered.length) % filtered.length;
           renderList();
         }
