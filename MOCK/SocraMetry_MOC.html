@@ -75,8 +75,9 @@
     <!-- ======================================== -->
     <!-- Sidebar -->
     <!-- ======================================== -->
+    <!-- overflow-y-auto：画面の高さが足りないときだけサイドバー内をスクロールさせる保険 -->
     <aside
-      class="flex w-[400px] shrink-0 flex-col bg-[#b1dcd8]"
+      class="flex w-[400px] shrink-0 flex-col overflow-y-auto bg-[#b1dcd8]"
     >
 
       <!-- Logo -->
@@ -99,7 +100,7 @@
 
       <!-- Hamburger -->
       <!-- 装飾のみ。JS の配線はしていないので押しても何も起きない -->
-      <div class="px-9 py-5">
+      <div class="px-9 py-3">
         <button
           class="flex h-12 w-12 items-center justify-center rounded-xl hover:bg-white/30"
         >
@@ -127,7 +128,7 @@
         <button
           id="btn-new-chat"
           type="button"
-          class="flex h-[82px] w-full items-center rounded-2xl bg-white px-8 text-[23px] font-medium shadow-sm transition hover:bg-slate-50 focus:outline-none focus-visible:ring-4 focus-visible:ring-[#6864d9]/40"
+          class="flex h-[64px] w-full items-center rounded-2xl bg-white px-6 text-[20px] font-medium shadow-sm transition hover:bg-slate-50 focus:outline-none focus-visible:ring-4 focus-visible:ring-[#6864d9]/40"
         >
           <span
             class="mr-4 flex h-7 w-7 items-center justify-center rounded-full border-2 border-[#716de0] text-[#716de0]"
@@ -139,18 +140,18 @@
       </div>
 
       <!-- Navigation -->
-      <nav class="mt-12 px-8">
+      <nav class="mt-6 px-8">
 
         <!-- チャット一覧：data-view を持たないので、クリックしても何も起きない -->
         <!-- JS 側の「if (!item.dataset.view) return;」で処理が打ち切られる -->
         <button
           type="button"
-          class="nav-item mb-7 flex w-full items-center gap-6 rounded-xl px-5 py-3 text-left text-[22px] font-medium transition hover:bg-white/20 focus:outline-none focus-visible:ring-4 focus-visible:ring-[#6864d9]/40"
+          class="nav-item mb-3 flex w-full items-center gap-6 rounded-xl px-5 py-2.5 text-left text-[19px] font-medium transition hover:bg-white/20 focus:outline-none focus-visible:ring-4 focus-visible:ring-[#6864d9]/40"
         >
           <!-- chat icon -->
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            class="h-7 w-7"
+            class="h-6 w-6"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -175,12 +176,12 @@
         <button
           type="button"
           id="btn-training"
-          class="nav-item mb-7 flex w-full items-center gap-6 rounded-xl px-5 py-3 text-left text-[22px] font-medium transition hover:bg-white/20 focus:outline-none focus-visible:ring-4 focus-visible:ring-[#6864d9]/40"
+          class="nav-item mb-3 flex w-full items-center gap-6 rounded-xl px-5 py-2.5 text-left text-[19px] font-medium transition hover:bg-white/20 focus:outline-none focus-visible:ring-4 focus-visible:ring-[#6864d9]/40"
         >
           <!-- target icon -->
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            class="h-7 w-7"
+            class="h-6 w-6"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -197,12 +198,12 @@
         <!-- 検索：data-view なし → 無反応 -->
         <button
           type="button"
-          class="nav-item mb-7 flex w-full items-center gap-6 rounded-xl px-5 py-3 text-left text-[22px] font-medium transition hover:bg-white/20 focus:outline-none focus-visible:ring-4 focus-visible:ring-[#6864d9]/40"
+          class="nav-item mb-3 flex w-full items-center gap-6 rounded-xl px-5 py-2.5 text-left text-[19px] font-medium transition hover:bg-white/20 focus:outline-none focus-visible:ring-4 focus-visible:ring-[#6864d9]/40"
         >
           <!-- search icon -->
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            class="h-7 w-7"
+            class="h-6 w-6"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -219,12 +220,12 @@
         <button
           type="button"
           data-view="dashboard"
-          class="nav-item mb-7 flex w-full items-center gap-6 rounded-xl px-5 py-3 text-left text-[22px] font-medium transition hover:bg-white/20 focus:outline-none focus-visible:ring-4 focus-visible:ring-[#6864d9]/40"
+          class="nav-item mb-3 flex w-full items-center gap-6 rounded-xl px-5 py-2.5 text-left text-[19px] font-medium transition hover:bg-white/20 focus:outline-none focus-visible:ring-4 focus-visible:ring-[#6864d9]/40"
         >
           <!-- chart icon -->
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            class="h-7 w-7"
+            class="h-6 w-6"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -239,12 +240,12 @@
         <!-- 設定：data-view なし → 無反応 -->
         <button
           type="button"
-          class="nav-item flex w-full items-center gap-6 rounded-xl px-5 py-3 text-left text-[22px] font-medium transition hover:bg-white/20 focus:outline-none focus-visible:ring-4 focus-visible:ring-[#6864d9]/40"
+          class="nav-item flex w-full items-center gap-6 rounded-xl px-5 py-2.5 text-left text-[19px] font-medium transition hover:bg-white/20 focus:outline-none focus-visible:ring-4 focus-visible:ring-[#6864d9]/40"
         >
           <!-- settings -->
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            class="h-7 w-7"
+            class="h-6 w-6"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -275,12 +276,12 @@
       </nav>
 
       <!-- User -->
-      <div class="mt-auto border-t border-white/30 px-9 py-8">
+      <div class="mt-auto border-t border-white/30 px-9 py-5">
 
         <div class="flex items-center">
 
           <div
-            class="flex h-16 w-16 items-center justify-center rounded-full bg-[#6864d9] text-lg font-bold text-white"
+            class="flex h-14 w-14 items-center justify-center rounded-full bg-[#6864d9] text-lg font-bold text-white"
           >
             DEV
           </div>
