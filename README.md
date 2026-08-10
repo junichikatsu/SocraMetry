@@ -186,52 +186,6 @@ AI を使うこと自体が目的ではないため、**使う場所と使わな
 | ZIP は**ルート直下に CommonJS の `index.js`** が必要 | pnpm の symlink が載らないため **esbuild で単一 CJS にバンドル** |
 | データストアのアクセス回数に月次上限 | 1 セッションを少数アイテムに集約 |
 
-## セットアップ
-
-> ⚠️ **現在は設計フェーズのため、以下はまだ動きません。**
-> `package.json` を含む実装は [Day 1](docs/roadmap.md#day-1--土台外部依存の不確実性を消す) で入ります。
-> 本節は [DoD #7](docs/scope-v0.1.md#7-完了の定義definition-of-done)
-> 「README だけを読んで、他人が API キーなしに `MOCK_MODE=true` でローカル起動できる」
-> を満たすための手順を先に定義したものです。
-
-**API キーなしで動かせる状態にします。** `MOCK_MODE=true` が既定で、LLM を一切呼ばずに
-3 ゲートの全導線を通せます。まずこの状態で動かしてください。
-
-```bash
-git clone https://github.com/junichikatsu/SocraMetry.git
-cd SocraMetry
-pnpm install
-
-cp .env.example .env      # MOCK_MODE=true が既定。編集は不要
-pnpm dev                  # http://localhost:3000
-```
-
-| 前提 | バージョン |
-|---|---|
-| Node.js | 22.x |
-| pnpm | 9.x |
-
-> **なぜ MOCK を既定にしているか**: OrcaRouter の API キーは配布できないため、
-> 実 LLM を前提にすると**第三者は原理的に起動できません**。
-> MOCK モードは固定の診断・ヒント・設問を返すので、キーなしで体験を確認できます。
-> 開発中の LLM 課金がゼロになり、自動テストも決定的になります
-> （[scope-v0.1.md §4.3](docs/scope-v0.1.md#43-mock-モードを最初に作る)）。
-
-### 実 LLM で動かす場合（API キーが必要）
-
-OrcaRouter のキーを持っている場合のみ。`.env` を以下のように変更します。
-
-```bash
-MOCK_MODE=false
-ORCA_API_KEY=<your-key>
-MODEL_DIAGNOSER=<高品質モデル>    # 原因特定。1 セッション 1 回
-MODEL_QUESTIONER=<安価モデル>     # ヒント・出題。1 セッション 10〜15 回
-MODEL_JUDGE=<安価モデル>          # 到達判定
-```
-
-モデル ID の選び方と単価は [cost-model.md](docs/cost-model.md) を参照してください。
-**キーはサーバ側の環境変数にのみ置き、フロントエンドには渡しません**（NFR-S1）。
-
 ## ドキュメント
 
 **実装対象は [scope-v0.1.md](docs/scope-v0.1.md) が正です。** 他は将来像を含みます。
@@ -255,7 +209,6 @@ MODEL_JUDGE=<安価モデル>          # 到達判定
 **設計フェーズ完了。実装はこれから。**
 `apps/` `packages/` は構成を確定させるための空スケルトンで、
 `.github/workflows/` のデプロイ定義も実装が入るまで手動実行のみに絞ってあります。
-**「セットアップ」の手順は完成時点のもので、現時点では動作しません。**
 
 次は [Day 1: 土台](docs/roadmap.md#day-1--土台外部依存の不確実性を消す) から着手します。
 
