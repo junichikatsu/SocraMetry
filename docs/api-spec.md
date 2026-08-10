@@ -175,7 +175,7 @@ Set-Cookie: sm_session=<jwt>; HttpOnly; Secure; SameSite=None; Max-Age=86400; Pa
 
 > **すべてのレイテンシは実行環境のタイムアウト設定内に収める必要がある。**
 > タイムアウトは `enebular bulk-update cloud-config` の `timeout` で設定する。
-> 実測前の暫定値は **30 秒**とし、M1 で上限を確認する（未決 Q-5）。
+> 実測前の暫定値は **30 秒**とし、**Day 1 午前**に上限を確認する（未決 Q-5）。
 
 ---
 
