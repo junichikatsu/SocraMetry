@@ -1,9 +1,9 @@
 # ============================================================================
 #  SocraMetry — enebular クラウド実行環境への ZIP デプロイ
 #
-#  注意: 現在は要件定義フェーズの設計案です。apps/function の実装が入るまで
-#        トリガーは workflow_dispatch のみに絞っています。
-#        実装完了後に下の push トリガーを有効化してください。
+#  現状: apps/function は GET /v1/health のみの骨格です。
+#        アプリ本体が入るまでトリガーは workflow_dispatch のみに絞っています。
+#        v0.1 の導線が通った時点で、下の push トリガーを有効化してください。
 #
 #  仕様: docs/deployment.md
 # ============================================================================
@@ -114,9 +114,20 @@ jobs:
             exit 1
           fi
 
-          # (3) index.js が CommonJS の exports.handler を持つか
-          if ! unzip -p "$ZIP_PATH" index.js | grep -qE 'exports\.handler|exports\[.handler.\]'; then
-            echo "::error::index.js に exports.handler が見つかりません"
+          # (3) index.js が CommonJS として handler を公開しているか
+          #     文字列の grep はしない。esbuild の CJS 出力は __toCommonJS 経由で
+          #     module.exports を組み立てるため、"exports.handler" という字面は現れない。
+          #     実際に require して型を見るのが、契約そのものの検証になる。
+          verify_dir="$(mktemp -d)"
+          unzip -q "$ZIP_PATH" -d "$verify_dir"
+          if ! node -e "
+            const m = require('$verify_dir/index.js');
+            if (typeof m.handler !== 'function') {
+              console.error('handler が関数として公開されていません:', typeof m.handler);
+              process.exit(1);
+            }
+          "; then
+            echo "::error::index.js が index.handler を公開していません"
             exit 1
           fi
 

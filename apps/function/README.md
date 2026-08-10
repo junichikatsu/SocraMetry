@@ -2,8 +2,10 @@
 
 Node.js 22.x / TypeScript / Hono / ZIP デプロイ
 
-> **未実装。** 現在は要件定義フェーズのため、このディレクトリは構成のプレースホルダです。
-> 着手は [M2: MVP](../../docs/roadmap.md#m2-mvpコア体験の一気通貫--cd) から。
+> **現状は `GET /v1/health` のみの骨格です。**
+> デプロイ経路（ZIP ビルド → GitHub Actions → enebular）を先に通すために作られており、
+> ルーティング・認証・ドメインロジックは未実装です。
+> アプリ本体の着手は [M2: MVP](../../docs/roadmap.md#m2-mvpコア体験の一気通貫--cd) から。
 
 ## 責務
 
@@ -58,13 +60,29 @@ pnpm の `node_modules` は symlink 構造でそのままでは載らないた�
 | 8 | データストアのキーは `OwnerId` / `TenantId` のブランド型でのみ組み立てる（ADR-010） |
 | 9 | **`GET /report` は冪等にする。** ここで `member_stats` を更新するため、二重実行すると評価データが壊れる |
 
-## コマンド（予定）
+## コマンド
+
+リポジトリのルートで `pnpm install` した後、
 
 ```bash
-pnpm dev            # local.ts を起動（Lambda なしで動作確認）
-pnpm build:zip      # esbuild → socrametry-function.zip
-pnpm test
+pnpm --filter @socrametry/function dev         # local.ts を起動（Lambda なしで動作確認）
+pnpm --filter @socrametry/function build:zip   # esbuild → socrametry-function.zip
+pnpm --filter @socrametry/function test
 ```
+
+ルートからは `pnpm dev` / `pnpm build:zip` / `pnpm test` / `pnpm typecheck` / `pnpm lint` でも実行できる。
+
+### 動作確認
+
+```bash
+pnpm dev
+curl http://localhost:8787/v1/health
+# {"status":"ok","version":"0.1.0","commit":"local","builtAt":"local","mockMode":false}
+```
+
+`commit` にはビルド時のコミット SHA が埋め込まれる（ローカル起動時は `local`）。
+**デプロイ後にこの値を見れば、意図したコミットが実際に動いているかを機械的に確認できる。**
+CI のスモークテストが叩くのもこのエンドポイント。
 
 ## 依存
 

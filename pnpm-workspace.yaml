@@ -1,0 +1,8 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# postinstall スクリプトの実行を許可する依存（pnpm 11 以降は明示が必要）。
+# esbuild はプラットフォーム別バイナリの配置に postinstall を使う。
+allowBuilds:
+  esbuild: true

@@ -1,0 +1,26 @@
+{
+  "name": "socrametry",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI に答えを出させるのではなく、AI に問いを出させる。デバッグ能力の育成と可視化",
+  "license": "MIT",
+  "packageManager": "pnpm@11.11.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @socrametry/function dev",
+    "build": "turbo run build",
+    "build:zip": "pnpm --filter @socrametry/function build:zip",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.0",
+    "eslint": "^9.39.0",
+    "turbo": "^2.5.8",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.0"
+  }
+}
