@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SocraMetry — ログイン</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!--
+      v0.1 の暫定画面。**登録とログインだけ**を扱う（3 ゲートの問答画面は別途）。
+      フレームワークを使わず、状態はセクションの表示切替で表現する（ADR-013）。
+    -->
+    <header class="site-header">
+      <h1>SocraMetry</h1>
+      <p class="tagline">AI に答えを出させるのではなく、AI に問いを出させる。</p>
+      <!-- MOCK モードであることを画面に明示する（ADR-014）。
+           本番だと思って見た人が誤解しないようにする -->
+      <p id="mock-badge" class="badge badge--mock" hidden>
+        MOCK モード — LLM を呼ばず固定応答を返しています
+      </p>
+      <p id="build-info" class="build-info"></p>
+    </header>
+
+    <main>
+      <!-- ── 未ログイン ─────────────────────────────────────── -->
+      <section id="auth" class="card" hidden>
+        <nav class="tabs" role="tablist">
+          <button id="tab-login" class="tab" type="button" role="tab" aria-selected="true">
+            ログイン
+          </button>
+          <button id="tab-signup" class="tab" type="button" role="tab" aria-selected="false">
+            はじめて使う
+          </button>
+        </nav>
+
+        <form id="form-login" class="form">
+          <label>
+            メールアドレス
+            <input name="email" type="email" autocomplete="username" required />
+          </label>
+          <label>
+            パスワード
+            <input name="password" type="password" autocomplete="current-password" required />
+          </label>
+          <button class="primary" type="submit">ログイン</button>
+        </form>
+
+        <form id="form-signup" class="form" hidden>
+          <label>
+            メールアドレス
+            <input name="email" type="email" autocomplete="username" required />
+          </label>
+          <label>
+            表示名
+            <input name="displayName" type="text" maxlength="40" required />
+          </label>
+          <label>
+            パスワード
+            <input name="password" type="password" autocomplete="new-password" required />
+            <span class="hint">8 文字以上</span>
+          </label>
+          <label>
+            招待コード
+            <input name="inviteCode" type="text" required />
+            <!-- 招待コード制の理由は「限定公開」と「LLM コストの流出防止」（security.md §5） -->
+            <span class="hint">管理者から受け取ったコードを入力してください</span>
+          </label>
+          <button class="primary" type="submit">登録して始める</button>
+        </form>
+      </section>
+
+      <!-- ── ログイン済み ───────────────────────────────────── -->
+      <section id="me" class="card" hidden>
+        <h2>ログインしています</h2>
+        <dl class="kv">
+          <dt>表示名</dt>
+          <dd id="me-name"></dd>
+          <dt>メールアドレス</dt>
+          <dd id="me-email"></dd>
+          <dt>ユーザー ID</dt>
+          <dd id="me-id" class="mono"></dd>
+        </dl>
+
+        <div class="actions">
+          <button id="btn-history" class="secondary" type="button">履歴を確認する</button>
+          <button id="btn-logout" class="secondary" type="button">ログアウト</button>
+        </div>
+
+        <p id="history-result" class="note" hidden></p>
+
+        <p class="note">
+          問答の画面はまだありません。ここまでで、認証とデータの保存が動いていることを確認できます。
+        </p>
+      </section>
+
+      <!-- 異常系は必ず画面に出す。原因が分からず止まる状態を作らない（F12 / FR-17） -->
+      <p id="error" class="error" hidden></p>
+    </main>
+
+    <footer class="site-footer">
+      <p>
+        入力されたエラーテキストは、診断のため外部の LLM に送信されます。API キーやトークンなどは
+        送信前に自動で伏せますが、<strong>顧客名などの固有名詞は自動では消えません</strong>。
+      </p>
+    </footer>
+
+    <script src="app.js"></script>
+  </body>
+</html>

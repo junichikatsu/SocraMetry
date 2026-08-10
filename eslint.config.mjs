@@ -26,6 +26,37 @@ export default tseslint.config(
     },
   },
   {
+    // フロントエンド（ADR-013: フレームワークなし・ビルド工程なし）。
+    // ブラウザで直接実行されるため、Node ではなくブラウザのグローバルを持つ。
+    files: ['apps/web/public/**/*.js'],
+    languageOptions: {
+      globals: {
+        console: 'readonly',
+        document: 'readonly',
+        fetch: 'readonly',
+        location: 'readonly',
+        FormData: 'readonly',
+        URL: 'readonly',
+        window: 'readonly',
+      },
+    },
+    rules: {
+      // 自動エスケープがない構成なので、innerHTML の混入を lint で止める
+      // （security.md §7 / LLM の出力とユーザー入力を DOM に入れる箇所がある）
+      'no-restricted-properties': [
+        'error',
+        {
+          property: 'innerHTML',
+          message: 'innerHTML は使わないこと。textContent を使う（security.md §7）。',
+        },
+        {
+          property: 'outerHTML',
+          message: 'outerHTML は使わないこと。textContent を使う（security.md §7）。',
+        },
+      ],
+    },
+  },
+  {
     // ADR-005 / packages/README: 答え（session_secrets）に触れてよいのは
     // packages/datastore の secret-repo と services/ 層だけ。
     // routes/ からの直接参照は構造として禁止する。

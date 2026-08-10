@@ -1,0 +1,221 @@
+/*
+  v0.1 の暫定スタイル。PC 前提（レスポンシブは F17 Won't）。
+  フレームワークもビルド工程も持たない（ADR-013）。
+*/
+
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --border: #d9dde3;
+  --text: #1b1f24;
+  --muted: #5b6470;
+  --accent: #2f5d8a;
+  --accent-strong: #24486b;
+  --danger: #8a2f2f;
+  --danger-bg: #fdf0f0;
+  --mock: #7a5c00;
+  --mock-bg: #fff8e1;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 48px 24px 64px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", system-ui, sans-serif;
+  line-height: 1.7;
+}
+
+.site-header,
+main,
+.site-footer {
+  max-width: 560px;
+  margin: 0 auto;
+}
+
+h1 {
+  margin: 0;
+  font-size: 28px;
+  letter-spacing: 0.02em;
+}
+
+.tagline {
+  margin: 4px 0 16px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.badge {
+  display: inline-block;
+  margin: 0 0 12px;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.badge--mock {
+  background: var(--mock-bg);
+  color: var(--mock);
+  border: 1px solid currentColor;
+}
+
+.build-info {
+  margin: 0 0 24px;
+  color: var(--muted);
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 24px;
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab {
+  padding: 10px 16px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.tab[aria-selected="true"] {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 700;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+input {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+  font-weight: 400;
+}
+
+input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+button.primary,
+button.secondary {
+  padding: 11px 18px;
+  border-radius: 4px;
+  font: inherit;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+button.primary {
+  border: 1px solid var(--accent-strong);
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+}
+
+button.secondary {
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--text);
+}
+
+button:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+/* 送信中はボタンを無効にする。これは UX のためで、防御はサーバの冪等性（security.md §6） */
+button:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 20px;
+  margin: 0 0 20px;
+  font-size: 14px;
+}
+
+.kv dt {
+  color: var(--muted);
+}
+
+.kv dd {
+  margin: 0;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+.note {
+  margin: 16px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.error {
+  margin: 20px 0 0;
+  padding: 14px 16px;
+  border: 1px solid var(--danger);
+  border-radius: 4px;
+  background: var(--danger-bg);
+  color: var(--danger);
+  font-size: 14px;
+  /* エラー本文は改行や JSON を含みうるのでそのまま読める形にする */
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.site-footer {
+  margin-top: 32px;
+  color: var(--muted);
+  font-size: 12px;
+}

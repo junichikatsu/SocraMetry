@@ -6,6 +6,7 @@ import { authRoutes } from './routes/auth'
 import { gateRoutes } from './routes/gates'
 import { reportRoutes } from './routes/reports'
 import { sessionRoutes } from './routes/sessions'
+import { createStaticRoutes } from './static'
 
 /** ビルド時に埋め込まれた情報。tsx でのローカル起動時は定義されない */
 const buildInfo =
@@ -61,6 +62,11 @@ function createRoutes() {
   routes.route('/', sessionRoutes)
   routes.route('/', gateRoutes)
   routes.route('/', reportRoutes)
+
+  // フロントエンドを同一オリジンで配信する（ADR-012）。
+  // API より後に置く。`/` と `/app.js` しか持たないため衝突はしないが、
+  // 静的ファイルが API を隠す可能性を構造的に作らない
+  routes.route('/', createStaticRoutes())
 
   return routes
 }
