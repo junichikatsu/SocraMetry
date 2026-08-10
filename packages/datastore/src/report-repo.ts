@@ -1,4 +1,4 @@
-import { getDataStoreClient, run } from './client'
+import { getDataStoreClient, run, runGet } from './client'
 import type { OwnerId } from './owner'
 import { tableId } from './tables'
 import type { ReportItem } from './types'
@@ -16,7 +16,7 @@ import type { ReportItem } from './types'
 const ORDER_DESC = true
 
 export async function getReport(owner: OwnerId, sessionId: string): Promise<ReportItem | null> {
-  const params = await run('reports.getItem', () =>
+  const params = await runGet('reports.getItem', () =>
     getDataStoreClient().getItem({
       tableId: tableId('reports'),
       key: { ownerId: owner, sessionId },

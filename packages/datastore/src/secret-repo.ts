@@ -1,4 +1,4 @@
-import { getDataStoreClient, run } from './client'
+import { getDataStoreClient, run, runGet } from './client'
 import { tableId } from './tables'
 import type { AnswerKeysSecret, DiagnosisSecret, RevealSecret, SecretKind } from './types'
 
@@ -16,7 +16,7 @@ import type { AnswerKeysSecret, DiagnosisSecret, RevealSecret, SecretKind } from
  */
 
 async function getSecret<T>(sessionId: string, kind: SecretKind): Promise<T | null> {
-  const params = await run(`secrets.getItem:${kind}`, () =>
+  const params = await runGet(`secrets.getItem:${kind}`, () =>
     getDataStoreClient().getItem({ tableId: tableId('secrets'), key: { sessionId, kind } }),
   )
   return (params?.Item as T | undefined) ?? null

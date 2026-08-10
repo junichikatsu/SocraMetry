@@ -1,4 +1,4 @@
-import { getDataStoreClient, run } from './client'
+import { getDataStoreClient, run, runGet } from './client'
 import { tableId } from './tables'
 import type { UserItem } from './types'
 
@@ -14,7 +14,7 @@ import type { UserItem } from './types'
 const KIND = 'account' as const
 
 export async function getUserByEmail(email: string): Promise<UserItem | null> {
-  const params = await run('users.getItem', () =>
+  const params = await runGet('users.getItem', () =>
     getDataStoreClient().getItem({ tableId: tableId('users'), key: { email, kind: KIND } }),
   )
   return (params?.Item as UserItem | undefined) ?? null

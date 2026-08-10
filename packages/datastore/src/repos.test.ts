@@ -210,9 +210,45 @@ describe('session-repo', () => {
    * SDK は `throw result.error` でデータストア側のエラーを**文字列のまま**投げる。
    * `Error` しか見ていないと原因の記述を丸ごと失う（実際にそれで詰まった）。
    */
+  /**
+   * データストアは `getItem` でアイテムが無いとき `"Not found"` を返す。
+   * **本製品では「無い」は正常系**（初回サインアップ時のアカウント確認など）であり、
+   * これを 503 にするとサインアップが原理的に成立しない。
+   */
+  it('アイテムが無いときの "Not found" は null にする', async () => {
+    const notFound = async () => {
+      throw 'Not found'
+    }
+    setDataStoreClient({
+      getItem: notFound,
+      putItem: notFound,
+      query: notFound,
+      deleteItem: notFound,
+    })
+
+    await expect(sessionRepo.getSession(owner, '01J8XK4M2N0000000000000001')).resolves.toBeNull()
+    await expect(secretRepo.getDiagnosis('01J8XK4M2N0000000000000001')).resolves.toBeNull()
+    await expect(reportRepo.getReport(owner, '01J8XK4M2N0000000000000001')).resolves.toBeNull()
+  })
+
+  it('書き込みとクエリの "Not found" は隠さない（設定ミスが埋もれるため）', async () => {
+    const notFound = async () => {
+      throw 'Not found'
+    }
+    setDataStoreClient({
+      getItem: notFound,
+      putItem: notFound,
+      query: notFound,
+      deleteItem: notFound,
+    })
+
+    await expect(sessionRepo.putSession({} as SessionItem)).rejects.toThrow(DataStoreError)
+    await expect(reportRepo.listReports(owner)).rejects.toThrow(DataStoreError)
+  })
+
   it('文字列が投げられてもデータストア側のエラーとして扱い、本文を保持する', async () => {
     const boom = async () => {
-      throw 'Requested resource not found: table 0000-0000'
+      throw 'ValidationException: key schema mismatch'
     }
     setDataStoreClient({ getItem: boom, putItem: boom, query: boom, deleteItem: boom })
 
@@ -220,9 +256,34 @@ describe('session-repo', () => {
 
     // 接続失敗（threw）ではなく、操作が返したエラー（failed）に分類する
     expect(error.kind).toBe('failed')
-    expect(error.rawMessage).toContain('table 0000-0000')
+    expect(error.rawMessage).toContain('key schema mismatch')
     // 公開用には含めない（出すかどうかは apps/function 側が LOG_LEVEL で判断する）
     expect(error.toPublicDetail()['message']).toBeUndefined()
+  })
+
+  /**
+   * **既知のトレードオフ。** プロキシはエラーを文字列でしか返さないため、
+   * 「アイテムが無い」と「テーブルが無い」を読み出しでは区別できない。
+   * 前者を通さないとサインアップが成立しないので、読みは空として扱う。
+   *
+   * **設定ミスは書き込みで必ず表面化する**ため、埋もれることはない
+   * （読みは空 → 続く putItem が 503 になる）。この関係が崩れると
+   * 「動いているように見えて何も保存されない」状態になりうるので、
+   * 挙動をテストで固定しておく。
+   */
+  it('テーブル不在も読みでは空になるが、書きで必ず失敗する', async () => {
+    const tableMissing = async () => {
+      throw 'Requested resource not found: Table not found'
+    }
+    setDataStoreClient({
+      getItem: tableMissing,
+      putItem: tableMissing,
+      query: tableMissing,
+      deleteItem: tableMissing,
+    })
+
+    await expect(sessionRepo.getSession(owner, '01J8XK4M2N0000000000000001')).resolves.toBeNull()
+    await expect(sessionRepo.putSession({} as SessionItem)).rejects.toThrow(DataStoreError)
   })
 
   it('テーブル ID が未設定なら、どのキーが足りないかを返す（値ではないので出してよい）', async () => {

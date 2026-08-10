@@ -1,4 +1,4 @@
-import { getDataStoreClient, run } from './client'
+import { getDataStoreClient, run, runGet } from './client'
 import type { OwnerId } from './owner'
 import { tableId } from './tables'
 import type { SessionItem } from './types'
@@ -22,7 +22,7 @@ import type { SessionItem } from './types'
 const ORDER_DESC = true
 
 export async function getSession(owner: OwnerId, sessionId: string): Promise<SessionItem | null> {
-  const params = await run('sessions.getItem', () =>
+  const params = await runGet('sessions.getItem', () =>
     getDataStoreClient().getItem({
       tableId: tableId('sessions'),
       // ★ メインキーに ownerId を含めるため、他人の sessionId では引けない

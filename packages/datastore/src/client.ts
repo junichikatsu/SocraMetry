@@ -79,6 +79,22 @@ export class DataStoreError extends Error {
       ...(this.errorName === undefined ? {} : { errorName: this.errorName }),
     }
   }
+
+  /**
+   * 「アイテムが存在しない」ことを表すか。
+   *
+   * **データストアは `getItem` でアイテムが無いときエラー（`"Not found"`）を返す。**
+   * 本製品では「無い」は正常系である（初回サインアップ時のアカウント確認、
+   * まだ診断が保存されていないセッション、レポート未生成の判定）。
+   * これを 503 にすると、**サインアップが原理的に成立しない。**
+   *
+   * 文字列一致に頼るのは本来避けたいが、プロキシはエラーを文字列でしか返さない。
+   * 誤ってテーブル不在をここで吸収しても、**書き込み側が必ず失敗するため
+   * 設定ミスは隠れない**（読みは空、書きは 503 として表面化する）。
+   */
+  isNotFound(): boolean {
+    return this.kind === 'failed' && /not\s*found/i.test(this.rawMessage ?? '')
+  }
 }
 
 let injected: DataStoreClient | null = null
@@ -174,6 +190,25 @@ function classify(operation: string, cause: unknown): DataStoreError {
     return new DataStoreError(operation, 'threw', cause.name, cause.message)
   }
   return new DataStoreError(operation, 'threw', typeof cause, safeStringify(cause))
+}
+
+/**
+ * 単一アイテムの取得。**「無い」をエラーにしない。**
+ *
+ * `run` と分けているのは、この扱いを `getItem` にだけ適用したいため。
+ * `putItem` / `query` / `deleteItem` の "not found" は設定ミスの可能性があり、
+ * 黙って空扱いにすると原因が隠れる。
+ */
+export async function runGet<T>(
+  operation: string,
+  call: () => Promise<DsResult<T>>,
+): Promise<T | undefined> {
+  try {
+    return await run(operation, call)
+  } catch (cause) {
+    if (cause instanceof DataStoreError && cause.isNotFound()) return undefined
+    throw cause
+  }
 }
 
 function safeStringify(value: unknown): string | undefined {
