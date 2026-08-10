@@ -20,6 +20,27 @@ describe('GET /v1/health', () => {
 
 // CI のスモークテストがこの configOk を見て落ちる。
 // 設定漏れがデプロイのたびに自動で検出される仕組み。
+// 環境変数とコードの既定値のどちらが効いているかは、外から見えないと切り分けられない。
+// 実際に「環境変数を消したのに古い値が効いたまま」で LLM 呼び出しを無駄にした。
+describe('GET /v1/health の出力上限', () => {
+  it('実際に効いている max_tokens を返す', async () => {
+    const res = await app.request('/v1/health')
+    const body = (await res.json()) as { limits: Record<string, number> }
+
+    expect(body.limits.diagnoser).toBe(1600)
+    expect(body.limits.questioner).toBe(900)
+  })
+
+  it('環境変数で上書きされていればその値が出る', async () => {
+    process.env['MAX_TOKENS_DIAGNOSER'] = '800'
+    const res = await app.request('/v1/health')
+    const body = (await res.json()) as { limits: Record<string, number> }
+
+    expect(body.limits.diagnoser).toBe(800)
+    delete process.env['MAX_TOKENS_DIAGNOSER']
+  })
+})
+
 describe('GET /v1/health の設定チェック', () => {
   const REQUIRED = {
     MOCK_MODE: 'true',

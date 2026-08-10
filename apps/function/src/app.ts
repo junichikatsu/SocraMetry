@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { checkConfig } from './config'
+import { maxTokensFor } from '@socrametry/llm'
 import { requireAuth, type AppEnv } from './middleware/auth'
 import { toErrorResponse } from './middleware/error-handler'
 import { authRoutes } from './routes/auth'
@@ -44,6 +45,24 @@ function createRoutes() {
       mockMode: process.env['MOCK_MODE'] === 'true',
       configOk: configIssues.length === 0,
       configMissing: configIssues.length,
+      /**
+       * **実際に効いている出力上限**（F04）。
+       *
+       * 環境変数とコードの既定値のどちらが効いているかは、外から見えないと
+       * 切り分けられない。実際に「環境変数を消したのに古い値が効いたまま」で
+       * LLM 呼び出しを 2 回無駄にした。
+       *
+       * 出すのは上限値だけで、モデル ID も鍵も出さない。
+       * 秘匿情報ではないが、認証不要のエンドポイントなので最小限にとどめる。
+       */
+      limits: {
+        diagnoser: maxTokensFor('diagnoser'),
+        hinter: maxTokensFor('hinter'),
+        questioner: maxTokensFor('questioner'),
+        judge: maxTokensFor('judge'),
+        revealer: maxTokensFor('revealer'),
+        reporter: maxTokensFor('reporter'),
+      },
     })
   })
 
