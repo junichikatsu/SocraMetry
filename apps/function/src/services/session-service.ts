@@ -256,7 +256,18 @@ export async function runDiagnosis(
   } catch (cause) {
     if (!(cause instanceof LlmError)) throw cause
     // **問答は止めない**（NFR-O4 / FR-15）。以降は focusHints なしの汎用モードで出題する
-    console.log(JSON.stringify({ level: 'WARN', event: 'diagnosis.failed', sessionId }))
+    // 失敗した呼び出しも記録する。**失敗こそ残さないと原因が追えない**（NFR-O2）
+    await applyCalls(session, cause.calls)
+    console.log(
+      JSON.stringify({
+        level: 'WARN',
+        event: 'diagnosis.failed',
+        sessionId,
+        reason: cause.reason,
+        detail: cause.detail ?? null,
+        attempts: cause.calls.map((call) => ({ model: call.model, error: call.error })),
+      }),
+    )
     session.diagnosisStatus = 'failed'
   }
 
@@ -710,6 +721,8 @@ export async function declareConclusion(
   } catch (cause) {
     if (!(cause instanceof LlmError)) throw cause
     // 失敗時に reached へ倒さない。評価が甘くなる方向のフォールバックは作らない
+    await applyCalls(session, cause.calls)
+    logLlmFailure('judge', sessionId, cause)
     verdict = FALLBACK_JUDGE.verdict
     feedback = FALLBACK_JUDGE.feedback
   }
@@ -728,6 +741,21 @@ export async function declareConclusion(
   return respond(
     { verdict, feedback },
     verdict === 'reached' ? reportPathOf(sessionId) : null,
+  )
+}
+
+/** 失敗した LLM 呼び出しを、切り分けできる粒度で残す（NFR-O2） */
+function logLlmFailure(role: string, sessionId: string, cause: LlmError): void {
+  console.log(
+    JSON.stringify({
+      level: 'WARN',
+      event: 'llm.failed',
+      role,
+      sessionId,
+      reason: cause.reason,
+      detail: cause.detail ?? null,
+      attempts: cause.calls.map((call) => ({ model: call.model, error: call.error })),
+    }),
   )
 }
 
@@ -823,6 +851,8 @@ async function buildReveal(
   } catch (cause) {
     if (!(cause instanceof LlmError)) throw cause
     // 解説の生成に失敗しても、**診断結果そのものは手元にある**ので開示できる
+    await applyCalls(session, cause.calls)
+    logLlmFailure('revealer', session.sessionId, cause)
     return {
       rootCause: diagnosis.rootCause,
       evidence: diagnosis.evidence,

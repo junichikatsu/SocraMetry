@@ -67,7 +67,9 @@ export async function generateGuardedQuestion(params: {
       if (last) last.leakGuardHit = true
     } catch (cause) {
       if (!(cause instanceof LlmError)) throw cause
-      logGenerationFailure('questioner', cause.reason)
+      // 失敗した呼び出しも記録に残す（NFR-O2）。原因を追う手段がなくなるため
+      calls.push(...cause.calls)
+      logGenerationFailure('questioner', cause)
       break
     }
   }
@@ -110,7 +112,8 @@ export async function generateGuardedHint(params: {
     if (last) last.leakGuardHit = true
   } catch (cause) {
     if (!(cause instanceof LlmError)) throw cause
-    logGenerationFailure('hinter', cause.reason)
+    calls.push(...cause.calls)
+    logGenerationFailure('hinter', cause)
   }
 
   // ヒントは再生成しない。1 文しかないため、失敗したら定型に落とす方が速く確実
@@ -128,6 +131,15 @@ function logFallback(role: string, stage: string | null): void {
   console.log(JSON.stringify({ level: 'WARN', event: 'generation.fallback', role, stage }))
 }
 
-function logGenerationFailure(role: string, reason: string): void {
-  console.log(JSON.stringify({ level: 'WARN', event: 'generation.failed', role, reason }))
+function logGenerationFailure(role: string, cause: LlmError): void {
+  console.log(
+    JSON.stringify({
+      level: 'WARN',
+      event: 'generation.failed',
+      role,
+      reason: cause.reason,
+      detail: cause.detail ?? null,
+      attempts: cause.calls.map((call) => ({ model: call.model, error: call.error })),
+    }),
+  )
 }

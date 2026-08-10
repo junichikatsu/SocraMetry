@@ -56,6 +56,15 @@ export class LlmError extends Error {
     readonly role: LlmRole,
     readonly reason: 'unconfigured' | 'request_failed' | 'invalid_output',
     readonly detail?: string,
+    /**
+     * 失敗した呼び出しの記録。
+     *
+     * **失敗こそ記録しなければならない**（NFR-O2）。
+     * 例外と一緒に運ぶのは、throw した時点で meta が呼び出し側に届かなくなるため。
+     * 実際、最初に実 LLM で回したとき Diagnoser が失敗したのに
+     * `ops_logs` に 1 行も残らず、**原因を追う手段が無かった。**
+     */
+    readonly calls: LlmCallMeta[] = [],
   ) {
     super(`llm ${role} failed: ${reason}`)
     this.name = 'LlmError'
@@ -199,7 +208,7 @@ export async function callJson<T>(params: JsonCallParams<T>): Promise<LlmResult<
   } catch (primaryError) {
     const fallback = fallbackModel()
     calls.push(failedMeta(params.role, primary, false, primaryError))
-    if (!fallback || fallback === primary) throw asLlmError(params.role, primaryError)
+    if (!fallback || fallback === primary) throw asLlmError(params.role, primaryError, calls)
 
     try {
       const { data, meta } = await callOnce(params, fallback, true)
@@ -207,9 +216,36 @@ export async function callJson<T>(params: JsonCallParams<T>): Promise<LlmResult<
       return { data, calls }
     } catch (fallbackError) {
       calls.push(failedMeta(params.role, fallback, true, fallbackError))
-      throw asLlmError(params.role, fallbackError)
+      throw asLlmError(params.role, fallbackError, calls)
     }
   }
+}
+
+/**
+ * 失敗の理由を、**運用で切り分けられる粒度**で残す。
+ *
+ * `request_failed` だけでは「モデル ID が違う」「キーが無効」「レート制限」
+ *「タイムアウト」のどれかが分からず、実質なにも分からないのと同じになる。
+ * プロバイダの HTTP ステータスとエラーコード、メッセージの先頭 200 文字を残す。
+ *
+ * **メッセージを全文入れない**のは、プロバイダによっては送信内容を
+ * エラーに含めることがあり、そこにエラーテキストが乗りうるため（security.md §2.3）。
+ * 先頭 200 文字なら、モデル不在・認証エラーの識別には足り、本文は入りきらない。
+ */
+function describeFailure(cause: unknown): string {
+  if (cause instanceof LlmError) {
+    return cause.detail === undefined ? cause.reason : `${cause.reason}:${cause.detail}`
+  }
+  if (typeof cause === 'object' && cause !== null) {
+    const err = cause as { status?: number; code?: string; type?: string; message?: string }
+    const parts = [
+      err.status === undefined ? null : `http_${err.status}`,
+      err.code ?? err.type ?? null,
+      err.message === undefined ? null : err.message.slice(0, 200),
+    ].filter((part): part is string => part !== null && part !== '')
+    if (parts.length > 0) return parts.join(' / ')
+  }
+  return 'request_failed'
 }
 
 function failedMeta(
@@ -231,14 +267,15 @@ function failedMeta(
     fallbackUsed,
     leakGuardHit: false,
     mocked: false,
-    // 例外のメッセージには入力が乗りうるため、種別だけを残す
-    error: cause instanceof LlmError ? cause.reason : 'request_failed',
+    error: describeFailure(cause),
   }
 }
 
-function asLlmError(role: LlmRole, cause: unknown): LlmError {
-  if (cause instanceof LlmError) return cause
-  return new LlmError(role, 'request_failed')
+function asLlmError(role: LlmRole, cause: unknown, calls: LlmCallMeta[]): LlmError {
+  if (cause instanceof LlmError) {
+    return new LlmError(role, cause.reason, cause.detail, calls)
+  }
+  return new LlmError(role, 'request_failed', describeFailure(cause), calls)
 }
 
 /** 生成前に弾かれたか（パラメータ非対応など）。トークンを消費していない */

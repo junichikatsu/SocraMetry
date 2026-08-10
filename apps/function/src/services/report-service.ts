@@ -98,7 +98,16 @@ export async function getOrCreateReport(
   } catch (cause) {
     if (!(cause instanceof LlmError)) throw cause
     // レポート生成に失敗しても**スコアは出す**。スコアは純関数で LLM に依存しない（NFR-Q4）
-    console.log(JSON.stringify({ level: 'WARN', event: 'report.generation_failed', sessionId }))
+    calls.push(...cause.calls)
+    console.log(
+      JSON.stringify({
+        level: 'WARN',
+        event: 'report.generation_failed',
+        sessionId,
+        reason: cause.reason,
+        attempts: cause.calls.map((call) => ({ model: call.model, error: call.error })),
+      }),
+    )
   }
 
   const previousTotal = await previousTotalScore(auth, sessionId)
