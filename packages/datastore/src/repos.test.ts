@@ -206,6 +206,25 @@ describe('session-repo', () => {
     expect(JSON.stringify(error.toPublicDetail())).not.toContain('sato@example.com')
   })
 
+  /**
+   * SDK は `throw result.error` でデータストア側のエラーを**文字列のまま**投げる。
+   * `Error` しか見ていないと原因の記述を丸ごと失う（実際にそれで詰まった）。
+   */
+  it('文字列が投げられてもデータストア側のエラーとして扱い、本文を保持する', async () => {
+    const boom = async () => {
+      throw 'Requested resource not found: table 0000-0000'
+    }
+    setDataStoreClient({ getItem: boom, putItem: boom, query: boom, deleteItem: boom })
+
+    const error = await captureError(sessionRepo.getSession(owner, '01J8XK4M2N0000000000000001'))
+
+    // 接続失敗（threw）ではなく、操作が返したエラー（failed）に分類する
+    expect(error.kind).toBe('failed')
+    expect(error.rawMessage).toContain('table 0000-0000')
+    // 公開用には含めない（出すかどうかは apps/function 側が LOG_LEVEL で判断する）
+    expect(error.toPublicDetail()['message']).toBeUndefined()
+  })
+
   it('テーブル ID が未設定なら、どのキーが足りないかを返す（値ではないので出してよい）', async () => {
     delete process.env['DS_TABLE_SESSIONS']
 

@@ -710,15 +710,31 @@ describe('異常系で画面が止まらない（F12 / FR-17）', () => {
     expect(res.body.error.message).toContain('v0.2')
   })
 
-  it('データストア障害は 503 として原因が分かる形で返る', async () => {
+  it('データストア障害は 503 として、どの操作が失敗したかが分かる形で返る', async () => {
     const cookie = await signIn()
     store.failNext('putItem')
 
     const res = await call('POST', '/v1/sessions', { cookie, body: { errorText: ERROR_TEXT } })
     expect(res.status).toBe(503)
     expect(res.body.error.code).toBe('DATASTORE_UNAVAILABLE')
+    // 「保存先に接続できません」だけでは切り分けられない（FR-17）
+    expect(res.body.error.detail).toMatchObject({ operation: 'sessions.putItem' })
     // 例外メッセージに入力が混ざらない（security.md §2.3）
     expect(JSON.stringify(res.body)).not.toContain('ProductList')
+  })
+
+  it('本番設定では外部サービスのメッセージを返さない（security.md §2.3）', async () => {
+    const cookie = await signIn()
+    // MOCK_MODE / LOG_LEVEL=DEBUG のときだけ message を足す
+    process.env['MOCK_MODE'] = 'false'
+    process.env['LOG_LEVEL'] = 'INFO'
+    store.failNext('putItem')
+
+    const res = await call('POST', '/v1/sessions', { cookie, body: { errorText: ERROR_TEXT } })
+
+    expect(res.body.error.detail.message).toBeUndefined()
+    process.env['MOCK_MODE'] = 'true'
+    delete process.env['LOG_LEVEL']
   })
 
   it('ULID でないセッション ID は 404（無駄なデータストアアクセスを消費しない）', async () => {

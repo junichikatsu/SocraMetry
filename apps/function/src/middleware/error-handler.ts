@@ -3,6 +3,7 @@ import { DataStoreError } from '@socrametry/datastore'
 import { LlmError } from '@socrametry/llm'
 import type { Context } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
+import { isDiagnosticsVerbose } from '../config'
 
 /**
  * 異常系の統一処理（F12 / FR-17 / api-spec.md §1）。
@@ -131,7 +132,18 @@ export function toErrorResponse(err: unknown, c: Context): Response {
 function normalize(err: unknown): ApiError {
   if (err instanceof ApiError) return err
   if (err instanceof LlmError) return errors.llmUnavailable()
-  if (err instanceof DataStoreError) return errors.dataStoreUnavailable(err.toPublicDetail())
+  if (err instanceof DataStoreError) {
+    /**
+     * 外部サービスのメッセージは**開発時だけ**出す（security.md §2.3）。
+     * `MOCK_MODE` か `LOG_LEVEL=DEBUG` のときに限り `message` を足す。
+     * 本番（`MOCK_MODE=false` / `LOG_LEVEL=INFO`）では操作名と種別だけになる。
+     */
+    const detail = err.toPublicDetail()
+    if (isDiagnosticsVerbose() && err.rawMessage !== undefined) {
+      detail['message'] = err.rawMessage
+    }
+    return errors.dataStoreUnavailable(detail)
+  }
 
   // 想定外。**例外メッセージをレスポンスに載せない**（入力値が混じりうる）
   console.log(

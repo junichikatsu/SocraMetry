@@ -144,17 +144,42 @@ export async function run<T>(
   try {
     result = await call()
   } catch (cause) {
-    throw new DataStoreError(
-      operation,
-      'threw',
-      cause instanceof Error ? cause.name : typeof cause,
-      cause instanceof Error ? cause.message : undefined,
-    )
+    throw classify(operation, cause)
   }
-  // `result.error` はデータストア側のメッセージ。キーの値（メールアドレス等）を
-  // 含みうるため rawMessage として持ち、公開もログもしない
+  // 到達しない想定（SDK は throw する）が、契約として両方を扱う
   if (result.result === 'fail') {
     throw new DataStoreError(operation, 'failed', undefined, result.error)
   }
   return result.params
+}
+
+/**
+ * 投げられた値を分類する。
+ *
+ * **SDK は `throw result.error` でデータストア側のエラーを「文字列のまま」投げる**
+ * （`CloudDataStoreClient.executeOperation`）。`Error` ではないため、
+ * `cause.message` だけを見ていると**原因の記述をまるごと捨てることになる。**
+ * デプロイ環境の 503 が切り分けられなかったのはこれが理由だった。
+ *
+ * | 投げられた値 | 意味 | kind |
+ * |---|---|---|
+ * | 文字列 | データストア操作がエラーを返した（テーブル不在・キー不正など） | `failed` |
+ * | `Error` | プロキシ Lambda に到達できない（接続不可・認証情報なし） | `threw` |
+ */
+function classify(operation: string, cause: unknown): DataStoreError {
+  if (typeof cause === 'string') {
+    return new DataStoreError(operation, 'failed', undefined, cause)
+  }
+  if (cause instanceof Error) {
+    return new DataStoreError(operation, 'threw', cause.name, cause.message)
+  }
+  return new DataStoreError(operation, 'threw', typeof cause, safeStringify(cause))
+}
+
+function safeStringify(value: unknown): string | undefined {
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return undefined
+  }
 }

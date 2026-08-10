@@ -89,6 +89,20 @@ export function isMockMode(env: Env = process.env): boolean {
   return value(env, 'MOCK_MODE') === 'true'
 }
 
+/**
+ * 障害の詳細（外部サービスのエラーメッセージ）をレスポンスとログに出してよいか。
+ *
+ * security.md §2.3 は「デバッグに本文が必要な場面はあるが、それは開発環境
+ * （`MOCK_MODE` または `LOG_LEVEL=DEBUG`）に限定し、本番では出さない」としている。
+ * **その条件をそのままコードにしたもの。**
+ *
+ * 対象は外部サービスが返したメッセージであり、利用者の入力そのものではないが、
+ * キーの値（メールアドレス）を含みうるため本番では伏せる。
+ */
+export function isDiagnosticsVerbose(env: Env = process.env): boolean {
+  return isMockMode(env) || value(env, 'LOG_LEVEL').toUpperCase() === 'DEBUG'
+}
+
 /** セッション Cookie（JWT）の署名鍵（security.md §5） */
 export function jwtSecret(env: Env = process.env): string {
   return value(env, 'SESSION_JWT_SECRET')
