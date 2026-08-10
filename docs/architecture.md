@@ -441,9 +441,32 @@ export const handler = handle(app)
 **理由**: ルーティング・バリデーション・エラーハンドリングを自前で書かずに済み、
 ローカル開発では同じ `app` を `@hono/node-server` で起動できる（Lambda なしでテスト可能）。
 
-**要検証（M1）**: enebular の HTTP トリガーが渡す `event` の形式（API Gateway v1 / v2 /
-Lambda Function URL のいずれか）を実測で確認する。形式が非標準の場合は、
-`event` を正規化する薄いアダプタを自前で書いて Hono に渡す。
+**実測でわかったこと（M1）**: enebular の HTTP トリガーは、**トリガーのパスを含めた**
+パスでハンドラを呼ぶ。トリガーが `/socrametry` なら、Hono が受け取るのは
+`/socrametry/v1/health` であって `/v1/health` ではない。
+
+そのため `apps/function/src/app.ts` は、同じルート定義を **3 通りにマウント**している。
+
+```ts
+app.route('/', createRoutes())         // /v1/health          ローカル・テスト
+app.route('/:base', createRoutes())    // /socrametry/v1/health  トリガー経由
+app.route('/:base/', createRoutes())   // /socrametry/           トリガーのルート URL
+```
+
+**先頭セグメントを環境変数で持たない。** `HTTP_TRIGGER_PATH` のような設定を置くと、
+その値とトリガーの実設定がずれた瞬間に**全リクエストが 404** になり、
+「関数は動いているのに何も応答しない」という最も切り分けにくい壊れ方をする。
+`:base` で受ければ設定自体が存在しなくなり、トリガーのパスを変えても再設定が要らない。
+
+**トリガーパスを剥がす前処理を採らなかった理由**: その場合ローカルと本番で
+「アプリが認識するパス」が変わり、ログとテストの前提がずれる。
+上の形なら、どちらの経路でも同じルートに同じパスで届く。
+
+**代償**: 任意の 1 セグメントを前置したパスでも API に届く（`/foo/v1/health` など）。
+認証はパスに依存しないため実害はないが、**セグメントを 2 つ以上前置したパスは通さない**。
+
+`event` そのものの形式（API Gateway v1 / v2 / Function URL）は `hono/aws-lambda` の
+`handle()` がそのまま解釈できており、正規化アダプタは不要だった。
 
 ---
 
@@ -647,7 +670,7 @@ BtoB 提供のため**エンタープライズプラン前提**（A-7）。
 |---|---|---|
 | **正解を署名付きトークンでクライアントに預ける** | ターンあたり 4 → 2 回（**半減**） | サーバ鍵で AES-GCM 暗号化する実装が必要。鍵管理を誤ると答えが漏れる |
 | 演習モードの `session_secrets` を省略 | 演習セッションで −12 回 | 正解が `question_bank` にあるため実は可能。ただし `question_bank` の読み出しが増える |
-| `ops_logs` を実行環境のログ出力に寄せる | セッションあたり −14 回 | ログサイズ枠を消費する。集計はしづらくなる（v1 は既定で無効） |
+| `ops_logs` を実行環境のログ出力に寄せる（`OPS_LOG_ENABLED=false`） | セッションあたり −14 回 | ログサイズ枠を消費する。集計はしづらくなる。**v0.1 は実測コスト表（F11）のため有効**、v0.2 以降は無効が既定 |
 
 v1 は**素直な実装**で進め、実測してから最適化を判断する。
 先に最適化すると、答えの取り扱いという最も壊してはいけない部分を、
@@ -673,6 +696,7 @@ v1 は**素直な実装**で進め、実測してから最適化を判断する�
 | `DS_TABLE_SECRETS` | 同上（★非公開テーブル） |
 | `DS_TABLE_REPORTS` | 同上 |
 | `DS_TABLE_OPS_LOGS` | 同上（コストログ） |
+| `OPS_LOG_ENABLED` | LLM 呼び出しログを `ops_logs` に書くか。**v0.1 は `true`**（[data-model.md §3.8](data-model.md#38-ops_logs--llm-呼び出しログnfr-o2)） |
 | `SESSION_TOKEN_BUDGET` | 1 セッションの LLM トークン上限（既定 80000, NFR-C1） |
 | `SESSION_JWT_SECRET` | セッション Cookie（JWT）の署名鍵 |
 | `INVITE_CODE` | サインアップに必要な招待コード（[security.md §5](security.md#5-認証v01-の簡易実装)） |

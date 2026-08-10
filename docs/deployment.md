@@ -2,8 +2,10 @@
 
 | 項目 | 内容 |
 |---|---|
-| ドキュメント版数 | v0.1 |
+| ドキュメント版数 | v0.2 |
 | 作成日 | 2026-08-09 |
+| 更新日 | 2026-08-10 |
+| 主な変更 | §3 の事前セットアップを v0.1 の実態に修正（プロジェクト 1 / テーブル 5 / キー定義を明記） |
 | 参照 | [ZIP ファイルデプロイ](https://docs.enebular.com/ja/GetStarted/ZIPFileDeployment.html) / [enebular CLI](https://www.npmjs.com/package/@uhuru/enebular-cli) / [GitHub Actions 自動化](https://blog.enebular.com/function/github-actions-enebular-cli-automation/) |
 
 ---
@@ -70,7 +72,7 @@ apps/web/public/
 > Lambda のファイルシステム読み込みが不要になり、
 > ZIP の中身は `index.js` と `package.json` の 2 つだけで済む。
 
-**`apps/function/build.mjs`（想定）**
+**`apps/function/build.mjs`**（実装は [apps/function/build.mjs](../apps/function/build.mjs)。以下は骨子）
 
 ```js
 // loader オプションで .html / .css / .js を文字列として取り込む（ADR-012）
@@ -111,14 +113,16 @@ await zip.finalize()
 ```json
 {
   "name": "socrametry-function",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "SocraMetry backend on enebular cloud execution environment",
   "main": "index.js"
 }
 ```
 
 > `"type": "module"` を**書かない**こと。ビルドスクリプトがこのファイルをコピーするだけの
-> 運用にしておけば、ルート `package.json` の設定に引きずられて壊れることがない。
+> 運用にしておけば、`apps/function/package.json`（こちらは `"type": "module"`）の
+> 設定に引きずられて壊れることがない。`build.mjs` は起動時にこのファイルを読み、
+> `type: "module"` が入っていたらビルドを失敗させる。
 
 **`apps/function/src/index.ts`**
 
@@ -144,6 +148,12 @@ ZIP の中身の検証も CI で行う。
 unzip -l socrametry-function.zip | head    # index.js と package.json がルートにあるか
 ```
 
+> **ハンドラの検証は文字列検索で行わない。** esbuild の CommonJS 出力は
+> `__toCommonJS` を経由して `module.exports` を組み立てるため、
+> バンドル結果に `exports.handler` という**字面は現れない**。
+> `require()` して `typeof handler === 'function'` を確認する
+> （契約そのものを検証する）方式にしている。`build.mjs` と CI の両方で実施する。
+
 ---
 
 ## 3. enebular 側の事前セットアップ（手動・初回のみ）
@@ -152,15 +162,39 @@ CLI は既存のアセットと実行環境に対して動くため、**最初�
 
 | # | 作業 | 取得する ID |
 |---|---|---|
-| 1 | プロジェクトを 2 つ作成（development / production） | `PROJECT_ID` × 2 |
-| 2 | データストアのテーブルを 4 つ作成（`sessions` / `session_secrets` / `reports` / `ops_logs`） | テーブル ID × 4 |
+| 1 | プロジェクトを **1 つ**作成（development 相当）※ production は v0.2（F19 Won't） | `PROJECT_ID` |
+| 2 | データストアのテーブルを **5 つ**作成（§3.1） | テーブル ID × 5 |
 | 3 | ZIP をファイルアセットとして登録（`--deploy-type cloud --handler index.handler`） | `ASSET_ID` |
 | 4 | ZIP 向けクラウド実行環境を作成（ランタイム Node.js 22.x） | `CLOUD_ID` |
 | 5 | HTTP トリガーを有効化しパスを設定（インスタンス内で一意） | トリガー URL |
 | 6 | `connectDataStore` を有効化し、環境変数を設定 | — |
 | 7 | アクセスキー / シークレットキーを発行 | `ENEBULAR_ACCESS_KEY` / `ENEBULAR_SECRET_KEY` |
 
-### 3.1 手順 3 を CLI で行う場合
+> **手順 3 は ZIP の実体を要求する。** アプリの実装前にセットアップを進める場合は、
+> `exports.handler` が 200 を返すだけの最小 ZIP を登録しておき、
+> 以降は CI の `enebular update file` で中身を差し替える。
+
+### 3.1 作成するテーブル（5 つ）
+
+コンソールでの作成時に**キー名と型**を指定する。定義は
+[data-model.md §2](data-model.md#2-テーブル一覧9-テーブル) と
+[scope-v0.1.md §4.4](scope-v0.1.md#44-データストアのテーブルを-5-つに絞る) が正。
+
+| # | テーブル | メインキー | サブキー | サブキー型 | 対応する環境変数 |
+|---|---|---|---|---|---|
+| 1 | `users` | `email` | `kind`（値は `"account"` 固定） | 文字列 | `DS_TABLE_USERS` |
+| 2 | `sessions` | `ownerId` | `sessionId`（ULID） | 文字列 | `DS_TABLE_SESSIONS` |
+| 3 | `session_secrets` | `sessionId` | `kind` | 文字列 | `DS_TABLE_SECRETS` |
+| 4 | `reports` | `ownerId` | `sessionId`（ULID） | 文字列 | `DS_TABLE_REPORTS` |
+| 5 | `ops_logs` | `sessionId` | `ts`（epoch ms） | **数値** | `DS_TABLE_OPS_LOGS` |
+
+`org_directory` / `member_stats` / `assignments` / `question_bank` は **v0.2 で追加**する（F16 Won't）。
+v0.1 はフリー / トライアル枠を前提とするため、テーブル数上限 10 に対して 5 で収める（前提 A-8）。
+
+> **`ops_logs` のサブキーだけが数値**である点に注意。
+> 文字列で作ると時系列の範囲クエリ（A5）が辞書順になり、桁が変わった時点で壊れる。
+
+### 3.2 手順 3 を CLI で行う場合
 
 ```bash
 enebular add file \
@@ -172,7 +206,7 @@ enebular add file \
   --detail "SocraMetry backend"
 ```
 
-### 3.2 環境変数の設定（手順 6）
+### 3.3 環境変数の設定（手順 6）
 
 `enebular bulk-update cloud-config` の設定ファイルで指定できるキーは
 `name` / `httpTriggerStatus` / `httpTriggerPath` / `scheduleTriggerStatus` /
@@ -222,8 +256,12 @@ OrcaRouter のキーが GitHub 側に一切存在しない状態を保てる。
 | `ENEBULAR_CLOUD_ID` | クラウド実行環境 ID |
 | `ENEBULAR_FILE_ASSET_ID` | ZIP のファイルアセット ID |
 
-GitHub Environments（`development` / `production`）を作り、
-環境ごとにこの 3 つを設定する。production には Required reviewers を付けて承認制にする。
+GitHub Environments を作り、環境ごとにこの 3 つを設定する。
+**v0.1 は `development` のみ**（enebular プロジェクトが 1 つのため）。
+`production` は v0.2 で追加し、Required reviewers を付けて承認制にする。
+
+このほか、デプロイ後の疎通確認に `HTTP_TRIGGER_URL`（トリガー URL）を設定できる。
+未設定ならスモークテストのステップはスキップされる。
 
 ### 4.3 実行順序
 
@@ -259,22 +297,53 @@ ZIP は決定的にビルドされるため、同じコミットからは同じ 
 
 ## 6. デプロイ前チェックリスト
 
-| # | 確認項目 |
+| # | 確認項目 | 検証 |
+|---|---|---|
+| 1 | ZIP のルート直下に `index.js` と `package.json` があるか | 自動 |
+| 2 | ZIP 内 `package.json` に `"type": "module"` が**ない**か | 自動 |
+| 3 | ハンドラ指定が `index.handler` になっているか | 自動 |
+| 4 | ZIP サイズが 250MB 以下か | 自動 |
+| 5 | デプロイしたコミットが実際に動いているか | 自動 |
+| 6 | `envVars` に必要なテーブル ID と鍵が設定されているか | 自動 |
+| 7 | `SESSION_JWT_SECRET` と `INVITE_CODE` が既定値（`change-me`）のままでないか | 自動 |
+| 8 | `connectDataStore` が有効か | 手動 |
+| 9 | `OPS_LOG_ENABLED` が `true` か（v0.1 はコスト実測のため有効にする / F11） | 手動 |
+| 10 | **`MOCK_MODE` が意図した値になっているか**（本番で `true` のまま公開しない） | 手動 |
+| 11 | HTTP トリガーのパスが enebular インスタンス内で一意か | 手動 |
+| 12 | `timeout` が API 仕様の想定レイテンシ（最大 20 秒）より長いか | 手動 |
+| 13 | `LOG_LEVEL` が `INFO` 以下か（`DEBUG` 以上は入力内容がログに出うる） | 手動 |
+
+**自動** = デプロイのたびに CI が検証し、満たさなければワークフローが落ちる。
+1〜4 は ZIP のビルド時（`build.mjs`）と `Verify ZIP layout`、
+5〜7 は `Smoke test` が `/v1/health` の応答を見て判定する。
+
+**手動** = 初回セットアップ時と設定変更時に人が確認する。
+9・10 は「意図した値かどうか」であり、機械には判定できない。
+
+### 6・7 の自動チェックの仕組み
+
+`apps/function/src/config.ts` が、**動作モードに応じて**必須の環境変数を判定する。
+
+| 条件 | 追加で必須になるもの |
 |---|---|
-| 1 | ZIP のルート直下に `index.js` と `package.json` があるか（`unzip -l` で確認） |
-| 2 | ZIP 内 `package.json` に `"type": "module"` が**ない**か |
-| 3 | ハンドラ指定が `index.handler` になっているか |
-| 4 | ZIP サイズが 250MB 以下か |
-| 5 | `connectDataStore` が有効か |
-| 6 | `envVars` に 5 つのテーブル ID と `ORCAROUTER_API_KEY` が設定されているか |
-| 7 | **`MOCK_MODE` が意図した値になっているか**（本番で `true` のまま公開しない） |
-| 8 | `SESSION_JWT_SECRET` と `INVITE_CODE` が既定値（`change-me`）のままでないか |
-| 9 | HTTP トリガーのパスが enebular インスタンス内で一意か |
-| 10 | `timeout` が API 仕様の想定レイテンシ（最大 20 秒）より長いか |
-| 11 | `LOG_LEVEL` が `INFO` 以下か（`DEBUG` 以上は入力内容がログに出うる） |
+| 常に | `DS_TABLE_USERS` / `SESSIONS` / `SECRETS` / `REPORTS`、`SESSION_JWT_SECRET`、`INVITE_CODE` |
+| `OPS_LOG_ENABLED=true` | `DS_TABLE_OPS_LOGS` |
+| `MOCK_MODE` が `true` 以外 | `ORCAROUTER_API_KEY`、`MODEL_DIAGNOSER` / `QUESTIONER` / `JUDGE` |
 
-1〜4 は CI で自動チェックする。5〜11 は初回セットアップ時と設定変更時に手動で確認する。
+`.env.example` の雛形の値（`00000000-…` / `change-me`）のままなら未設定として扱う。
 
-> **7 と 8 は特に注意。** `MOCK_MODE=true` のまま公開すると、
+> **不足しているキー名は `/v1/health` に出さない。** このエンドポイントは認証不要のため、
+> 公開するのは `configOk`（真偽値）と `configMissing`（件数）だけ。
+> キー名は**起動時のログ**（`config.incomplete`）にのみ出力する。値はどこにも出さない。
+
+> **起動を止める形（throw）にはしない。** 設定 1 個の欠けで全リクエストが 500 になると
+> `/v1/health` すら返らず、「関数は動いているのに何も応答しない」という
+> 最も切り分けにくい状態になる。`configOk: false` を返せる状態で立ち上がる方が診断できる。
+
+> **トリガーのパスをアプリ側に設定する必要はない。**
+> アプリは先頭セグメントを問わずルーティングするため、
+> トリガーのパスを変えてもアプリの再設定は要らない（ADR-009）。
+
+> **10 は特に注意。** `MOCK_MODE=true` のまま公開すると、
 > 固定応答が返っていることに気づかないまま「動いている」と見えてしまう。
-> `INVITE_CODE` が既定値のままだと、招待コード制が実質無効になる。
+> ここだけは自動化できないため、`/v1/health` の `mockMode` を目視で確認する。

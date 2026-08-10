@@ -1,0 +1,6 @@
+{
+  "name": "socrametry-function",
+  "version": "0.1.0",
+  "description": "SocraMetry backend on enebular cloud execution environment",
+  "main": "index.js"
+}

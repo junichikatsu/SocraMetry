@@ -1,9 +1,9 @@
 # ============================================================================
 #  SocraMetry — enebular クラウド実行環境への ZIP デプロイ
 #
-#  注意: 現在は要件定義フェーズの設計案です。apps/function の実装が入るまで
-#        トリガーは workflow_dispatch のみに絞っています。
-#        実装完了後に下の push トリガーを有効化してください。
+#  現状: apps/function は GET /v1/health のみの骨格です。
+#        アプリ本体が入るまでトリガーは workflow_dispatch のみに絞っています。
+#        v0.1 の導線が通った時点で、下の push トリガーを有効化してください。
 #
 #  仕様: docs/deployment.md
 # ============================================================================
@@ -57,13 +57,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: pnpm
@@ -114,9 +114,20 @@ jobs:
             exit 1
           fi
 
-          # (3) index.js が CommonJS の exports.handler を持つか
-          if ! unzip -p "$ZIP_PATH" index.js | grep -qE 'exports\.handler|exports\[.handler.\]'; then
-            echo "::error::index.js に exports.handler が見つかりません"
+          # (3) index.js が CommonJS として handler を公開しているか
+          #     文字列の grep はしない。esbuild の CJS 出力は __toCommonJS 経由で
+          #     module.exports を組み立てるため、"exports.handler" という字面は現れない。
+          #     実際に require して型を見るのが、契約そのものの検証になる。
+          verify_dir="$(mktemp -d)"
+          unzip -q "$ZIP_PATH" -d "$verify_dir"
+          if ! node -e "
+            const m = require('$verify_dir/index.js');
+            if (typeof m.handler !== 'function') {
+              console.error('handler が関数として公開されていません:', typeof m.handler);
+              process.exit(1);
+            }
+          "; then
+            echo "::error::index.js が index.handler を公開していません"
             exit 1
           fi
 
@@ -197,7 +208,23 @@ jobs:
 
           status="$(curl -sS -o /tmp/health.json -w '%{http_code}' "${{ vars.HTTP_TRIGGER_URL }}/v1/health")"
           cat /tmp/health.json
+          echo
           if [ "$status" != "200" ]; then
             echo "::error::ヘルスチェックが $status を返しました"
+            exit 1
+          fi
+
+          # デプロイしたコミットが実際に動いているか（ZIP の差し替え漏れの検出）
+          deployed="$(node -p "JSON.parse(require('fs').readFileSync('/tmp/health.json','utf8')).commit")"
+          if [ "$deployed" != "$GITHUB_SHA" ]; then
+            echo "::error::動いているのは $deployed で、デプロイしたはずの $GITHUB_SHA ではありません"
+            exit 1
+          fi
+
+          # 環境変数の設定漏れ（apps/function/src/config.ts）
+          # キー名は公開しないため、不足時はクラウド実行環境のログを見る
+          if ! node -e "process.exit(JSON.parse(require('fs').readFileSync('/tmp/health.json','utf8')).configOk ? 0 : 1)"; then
+            missing="$(node -p "JSON.parse(require('fs').readFileSync('/tmp/health.json','utf8')).configMissing")"
+            echo "::error::環境変数が ${missing} 件不足しています。不足しているキー名はクラウド実行環境のログ（config.incomplete）に出ています"
             exit 1
           fi

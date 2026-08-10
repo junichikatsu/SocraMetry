@@ -2,9 +2,9 @@
 
 | 項目 | 内容 |
 |---|---|
-| ドキュメント版数 | v0.3 |
-| 更新日 | 2026-08-09 |
-| 主な変更 | **BtoB 化に伴いテナント設計を導入。** 組織 / メンバー / 問題集 / 割り当て / 集計の 4 テーブルを追加（計 8 テーブル） |
+| ドキュメント版数 | v0.4 |
+| 更新日 | 2026-08-10 |
+| 主な変更 | `users` テーブル（v0.1 の簡易ログイン）を正式に定義し、全テーブルのサブキー型を明記（計 9 テーブル） |
 | 参照 | [データストア概要](https://docs.enebular.com/ja/datastore/overview) / [@uhuru/enebular-sdk](https://www.npmjs.com/package/@uhuru/enebular-sdk) |
 
 > ⚠️ **v0.1 の実装対象は 5 テーブル**（`users` / `sessions` / `session_secrets` / `reports` / `ops_logs`）。
@@ -27,7 +27,7 @@ enebular データストアは **JSON アイテムを格納するキーバリュ
 | 検索は**メインキー完全一致 + サブキー条件** | **二次インデックスがない**。メインキーで引けないアクセスパターンは作れない |
 | JOIN / リレーションなし | 一緒に読むデータは**同じアイテムに入れる**（非正規化が原則） |
 | 1 アイテム約 **350KB** まで | セッション 1 件をまるごと 1 アイテムにできる（見積 35KB） |
-| テーブル数上限 **10（フリー） / 100（エンタープライズ）** | v1 は **8 テーブル**。BtoB 提供のためエンタープライズプラン前提（A-7） |
+| テーブル数上限 **10（フリー） / 100（エンタープライズ）** | **v0.1 は 5 テーブル**（フリー / トライアル枠に収める / A-8）。v0.2 で 9 テーブルとなりエンタープライズプラン前提（A-10） |
 | アクセス回数が課金・制限対象 | **読み書きの回数そのものが設計指標**（[architecture.md §6](architecture.md#6-キャパシティ試算)） |
 | **集計クエリ（COUNT / AVG / GROUP BY）がない** | 組織ダッシュボードのために**集計を事前計算して専用テーブルに置く**（D4） |
 
@@ -57,26 +57,32 @@ ownerId = "<tenantId>:<memberId>"
 
 ---
 
-## 2. テーブル一覧（8 テーブル）
+## 2. テーブル一覧（9 テーブル）
 
-| # | テーブル | メインキー | サブキー | 用途 | 公開 |
-|---|---|---|---|---|---|
-| 1 | `sessions` | `ownerId` | `sessionId` (ULID) | セッション本体 + 全ターン | ○ |
-| 2 | `session_secrets` | `sessionId` | `kind` | **内部診断と正解** | **✗ 非公開** |
-| 3 | `reports` | `ownerId` | `sessionId` (ULID) | 振り返りレポート + スコア | ○ |
-| 4 | **`org_directory`** | `tenantId` | `"meta"` \| `"member#<memberId>"` | 組織設定・メンバー・ロール | ○ |
-| 5 | **`member_stats`** | `tenantId` | `memberId` | **事前計算した集計**（ダッシュボード用） | ○ |
-| 6 | **`assignments`** | `ownerId` | `assignmentId` (ULID) | 演習問題の割り当てと進捗 | ○ |
-| 7 | **`question_bank`** | `tenantId` | `problemId` (ULID) | 社内問題集 | ○ |
-| 8 | `ops_logs` | `sessionId` | `ts` (number) | LLM 呼び出しログ (NFR-O2) | ✗ 運用用 |
+| # | テーブル | メインキー | サブキー | サブキー型 | 用途 | 版 | 公開 |
+|---|---|---|---|---|---|---|---|
+| 1 | `users` | `email` | `kind`（`"account"` 固定） | 文字列 | 簡易ログインのアカウント | v0.1 | ✗ 非公開 |
+| 2 | `sessions` | `ownerId` | `sessionId` (ULID) | 文字列 | セッション本体 + 全ターン | v0.1 | ○ |
+| 3 | `session_secrets` | `sessionId` | `kind` | 文字列 | **内部診断と正解** | v0.1 | **✗ 非公開** |
+| 4 | `reports` | `ownerId` | `sessionId` (ULID) | 文字列 | 振り返りレポート + スコア | v0.1 | ○ |
+| 5 | `ops_logs` | `sessionId` | `ts` | **数値** (epoch ms) | LLM 呼び出しログ (NFR-O2) | v0.1 | ✗ 運用用 |
+| 6 | **`org_directory`** | `tenantId` | `"meta"` \| `"member#<memberId>"` | 文字列 | 組織設定・メンバー・ロール | v0.2 | ○ |
+| 7 | **`member_stats`** | `tenantId` | `memberId` | 文字列 | **事前計算した集計**（ダッシュボード用） | v0.2 | ○ |
+| 8 | **`assignments`** | `ownerId` | `assignmentId` (ULID) | 文字列 | 演習問題の割り当てと進捗 | v0.2 | ○ |
+| 9 | **`question_bank`** | `tenantId` | `problemId` (ULID) | 文字列 | 社内問題集 | v0.2 | ○ |
 
 テーブル ID（UUID）は enebular コンソールで作成して払い出し、
 環境変数 `DS_TABLE_SESSIONS` などで実行環境に渡す（[architecture.md §7](architecture.md#7-環境変数)）。
+作成手順は [deployment.md §3.1](deployment.md#31-作成するテーブル5-つ)。
+
+> **`ops_logs` のサブキーだけが数値型。** ほかはすべて文字列。
+> `ts` を文字列で作ると A5 の時系列クエリが辞書順になり、桁が変わった時点で順序が壊れる。
 
 ### なぜこのキーなのか — アクセスパターン対応表
 
 | # | 必要な操作 | 実現方法 | アクセス回数 |
 |---|---|---|---|
+| A0 | ログイン時にアカウントを引く | `getItem(users, { email, kind: "account" })` | 1 |
 | A1 | セッションを ID で取得 | `getItem(sessions, { ownerId, sessionId })` | 1 |
 | A2 | 自分のセッション履歴を新しい順に一覧 | `query(sessions, "#ownerId = :ownerId", order: false, limit: 20)` | 1 |
 | A3 | セッションの答えを取得 | `getItem(session_secrets, { sessionId, kind: "diagnosis" })` | 1 |
@@ -519,8 +525,50 @@ Crockford Base32 であり、**文字列としての辞書順 = 生成時刻順*
 ```
 
 **書き込み方針**: データストアのアクセス枠を消費するため、
-**v1 では既定で無効**とし、環境変数 `OPS_LOG_ENABLED=true` のときだけ書く。
-通常は実行環境の標準ログ（`console.log` の構造化 JSON）に出力する。
+環境変数 `OPS_LOG_ENABLED=true` のときだけ書き、無効時は実行環境の標準ログ
+（`console.log` の構造化 JSON）に出力する。
+
+| 版 | 既定値 | 理由 |
+|---|---|---|
+| **v0.1** | **`true`（有効）** | 実測コスト表（F11）を成果物とするため、集計できる形で残す必要がある。検証中はセッション数が少なく、アクセス枠への影響が問題にならない |
+| v0.2 以降 | `false`（無効） | セッションあたり約 14 アクセスを消費する。運用規模ではログ出力に寄せる |
+
+---
+
+### 3.9 `users` — 簡易ログインのアカウント（v0.1）
+
+**キー**: `email`（メイン） / `kind`（サブ, 文字列。値は `"account"` 固定）
+
+v0.1 の簡易認証（メール + パスワード / [security.md §5](security.md#5-認証v01-の簡易実装)）で使う。
+**v0.2 で SSO（OIDC / OAuth）に移行する際は `org_directory` の
+`member#<memberId>` アイテムに統合され、このテーブルは役目を終える。**
+
+```jsonc
+{
+  "email": "sato@example.com",
+  "kind": "account",
+
+  "userId": "usr_9d0e11",            // ownerId の実体。v0.1 は "usr_<id>" がそのまま ownerId
+  "displayName": "佐藤",
+  "passwordHash": "…",               // node:crypto の scrypt（ソルトはユーザーごと）
+  "passwordSalt": "…",
+  "status": "active",                // active | suspended
+  "createdAt": 1786000000000,
+  "lastLoginAt": 1786500000000
+}
+```
+
+**アクセスパターンは 1 つだけ**: ログイン時に `getItem(users, { email, kind: "account" })`。
+メールアドレスがそのままメインキーであり、二次インデックスを必要としない。
+
+> **サブキーが 1 値しかないのに持たせている理由**: enebular データストアのキーは
+> 「メインキー + サブキー」の組で一意になる。将来 1 アカウントに複数の付帯情報
+> （API トークン、通知設定など）を持たせたくなったとき、
+> **`kind` を増やすだけで済む形**にしておく。`session_secrets` と同じ設計。
+
+> **`userId` を別に持ち、メールをキーにしない**のは、
+> `sessions` / `reports` のメインキー `ownerId` にメールアドレスを載せないため。
+> メール変更でキーが変わると、過去のセッションが引けなくなる。
 
 ---
 
@@ -625,6 +673,7 @@ for (const table of [TABLE_SESSIONS, TABLE_REPORTS]) {
 
 | 対象 | 保持期間 |
 |---|---|
+| `users` | 退会または v0.2 の SSO 移行まで（移行後は `org_directory` に統合して削除） |
 | `sessions` / `reports` | 組織設定 `dataRetentionDays`（既定 730 日）または利用者による削除まで |
 | `session_secrets` (`diagnosis`) | セッション完了から 90 日で `rootCause` を空にする（レポート生成後は不要） |
 | `session_secrets` (`answerkeys`) | セッション完了時に削除（再出題はないため） |
@@ -647,7 +696,7 @@ DELETE ops_logs        { sessionId, ts } × N   （query して全件削除）
 ```
 
 `ops_logs` の削除は件数分のアクセスを消費するため、
-`OPS_LOG_ENABLED=false`（既定）であればスキップする。
+`OPS_LOG_ENABLED=false` であればスキップする（v0.1 は `true` のため実行される）。
 
 **セッション削除時は `member_stats` の再計算が必要。**
 `member_stats` はキャッシュなので、削除後に `reports` から再構築する。

@@ -182,21 +182,24 @@ LLM 呼び出しがコードの各所に散った後になり、差し込みが�
 
 マルチテナント（F16 Won't）を落とすため、キー設計を単純化する。
 
-| # | テーブル | メインキー | サブキー | v0.1 | 備考 |
-|---|---|---|---|---|---|
-| 1 | `users` | `email` | `"account"` | ✅ | 簡易ログイン用 |
-| 2 | `sessions` | `ownerId` | `sessionId` (ULID) | ✅ | セッション本体 + 全ターン |
-| 3 | `session_secrets` | `sessionId` | `kind` | ✅ | 診断と正解（★非公開） |
-| 4 | `reports` | `ownerId` | `sessionId` (ULID) | ✅ | レポート + スコア |
-| 5 | `ops_logs` | `sessionId` | `ts` | ✅ | **コストログ**（F11） |
-| — | `org_directory` / `member_stats` / `assignments` / `question_bank` | | | ❌ | v0.2（F16 Won't） |
+| # | テーブル | メインキー | サブキー | サブキー型 | v0.1 | 備考 |
+|---|---|---|---|---|---|---|
+| 1 | `users` | `email` | `kind`（値は `"account"` 固定） | 文字列 | ✅ | 簡易ログイン用 |
+| 2 | `sessions` | `ownerId` | `sessionId` (ULID) | 文字列 | ✅ | セッション本体 + 全ターン |
+| 3 | `session_secrets` | `sessionId` | `kind` | 文字列 | ✅ | 診断と正解（★非公開） |
+| 4 | `reports` | `ownerId` | `sessionId` (ULID) | 文字列 | ✅ | レポート + スコア |
+| 5 | `ops_logs` | `sessionId` | `ts` (epoch ms) | **数値** | ✅ | **コストログ**（F11） |
+| — | `org_directory` / `member_stats` / `assignments` / `question_bank` | | | | ❌ | v0.2（F16 Won't） |
+
+アイテム定義は [data-model.md §3](data-model.md#3-アイテム定義)、
+コンソールでの作成手順は [deployment.md §3.1](deployment.md#31-作成するテーブル5-つ)。
 
 **`ownerId` は v0.1 では `usr_<id>`。** v0.2 でテナントを入れる際に
 `<tenantId>:<memberId>` へ拡張する。**キー名を今のうちに `ownerId` にしておく**ことで、
 拡張時にテーブル定義とクエリの形を変えずに済む。今この命名にするコストはゼロ。
 
-> `ops_logs` は元の設計では既定で無効だったが、
-> **v0.1 ではコスト実測（F11）のため有効にする**。フリー枠での検証中は
+> `ops_logs` は v0.2 以降の運用規模では既定で無効だが、
+> **v0.1 ではコスト実測（F11）のため `OPS_LOG_ENABLED=true` にする**。フリー枠での検証中は
 > セッション数が少ないため、アクセス枠への影響は問題にならない。
 
 ---
