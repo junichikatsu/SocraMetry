@@ -6,6 +6,7 @@ import {
   type StageOutcome,
 } from '@socrametry/core'
 import {
+  opsRepo,
   ownerIdOf,
   reportRepo,
   secretRepo,
@@ -31,6 +32,7 @@ import type {
   StagePathPublic,
 } from '@socrametry/shared'
 import { STAGES } from '@socrametry/shared'
+import { opsLogEnabled } from '../config'
 import { logSessionCost, recordLlmCalls, totalTokens } from '../middleware/cost-log'
 import { errors } from '../middleware/error-handler'
 import { toSessionSummary } from './presenters'
@@ -342,4 +344,80 @@ function averageAxes(reports: readonly ReportItem[]): ScoreAxes {
 /** 育成の示唆に使う軸のラベル（evaluation-model.md §5.2） */
 export function axisLabel(stage: Stage): string {
   return STAGE_LABELS[stage].name
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  GET /v1/sessions/:id/cost
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 1 セッションの実測コスト（F11 / cost-model.md §4）。
+ *
+ * **api-spec.md には無いエンドポイント。** 実測コスト表（§5.4）を埋めるには
+ * `ops_logs` を読む手段が要り、それが無いと実行環境のログを人が見るしかない。
+ * デモ台本 #6「コストログを見せる」も画面から出せないままになる。
+ *
+ * `ops_logs` のメインキーは `sessionId` で `ownerId` を含まないため、
+ * **先に `sessions` を読んで所有者を確認してから**でなければ呼んではならない。
+ */
+export async function getSessionCost(auth: AuthContext, sessionId: string) {
+  const session = await sessionRepo.getSession(ownerIdOf(auth), sessionId)
+  if (!session) throw errors.sessionNotFound()
+
+  if (!opsLogEnabled()) {
+    return {
+      sessionId,
+      enabled: false,
+      reachedGate: session.reachedGate,
+      calls: [],
+      summary: emptySummary(),
+      note: 'OPS_LOG_ENABLED が false のため、コストは実行環境の標準ログにのみ出力されています',
+    }
+  }
+
+  const logs = await opsRepo.listOpsLogs(sessionId, 200)
+  const byRole: Record<string, number> = {}
+  const summary = logs.reduce(
+    (acc, log) => {
+      byRole[log.role] = (byRole[log.role] ?? 0) + (log.estimatedCostUsd ?? 0)
+      return {
+        promptTokens: acc.promptTokens + log.promptTokens,
+        completionTokens: acc.completionTokens + log.completionTokens,
+        costUsd: acc.costUsd + (log.estimatedCostUsd ?? 0),
+        costJpy: acc.costJpy + (log.estimatedCostJpy ?? 0),
+        quality: acc.quality + (log.tier === 'quality' ? 1 : 0),
+        cheap: acc.cheap + (log.tier === 'cheap' ? 1 : 0),
+        // 単価表に無いモデルは合計に混ぜず件数だけ数える（0 円と誤解させない）
+        unknownPrice: acc.unknownPrice + (log.estimatedCostUsd === null ? 1 : 0),
+        leakGuardHits: acc.leakGuardHits + (log.leakGuardHit ? 1 : 0),
+        errors: acc.errors + (log.error === null ? 0 : 1),
+        latencyMs: acc.latencyMs + log.latencyMs,
+      }
+    },
+    emptySummary(),
+  )
+
+  return {
+    sessionId,
+    enabled: true,
+    reachedGate: session.reachedGate,
+    calls: logs,
+    summary: { ...summary, callCount: logs.length, breakdownUsd: byRole },
+    note: null,
+  }
+}
+
+function emptySummary() {
+  return {
+    promptTokens: 0,
+    completionTokens: 0,
+    costUsd: 0,
+    costJpy: 0,
+    quality: 0,
+    cheap: 0,
+    unknownPrice: 0,
+    leakGuardHits: 0,
+    errors: 0,
+    latencyMs: 0,
+  }
 }

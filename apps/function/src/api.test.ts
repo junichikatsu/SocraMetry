@@ -577,6 +577,26 @@ describe('レポートとスコア（FR-21 / FR-23 / NFR-F1）', () => {
     expect(res.body.revealedAnswer).toBe(MOCK_DIAGNOSIS.rootCause)
   })
 
+  it('コストを返す。MOCK の呼び出しは記録しない（実測が 0 円で埋まらないように）', async () => {
+    const cookie = await signIn()
+    const id = await completedSession(cookie)
+
+    const res = await call('GET', `/v1/sessions/${id}/cost`, { cookie })
+    expect(res.status).toBe(200)
+    // このテストは OPS_LOG_ENABLED=false で走っている
+    expect(res.body.enabled).toBe(false)
+    expect(res.body.note).toContain('OPS_LOG_ENABLED')
+  })
+
+  it('他人のセッションのコストは見られない（ops_logs は ownerId を持たない）', async () => {
+    const owner = await signIn('cost-owner@example.com')
+    const id = await completedSession(owner)
+    const other = await signIn('cost-other@example.com')
+
+    const res = await call('GET', `/v1/sessions/${id}/cost`, { cookie: other })
+    expect(res.status).toBe(404)
+  })
+
   it('履歴一覧と個人統計を返す（FR-14 / FR-24）', async () => {
     const cookie = await signIn()
     const id = await completedSession(cookie)

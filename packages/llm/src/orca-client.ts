@@ -114,20 +114,39 @@ async function callOnce<T>(
     mocked: false,
   }
 
-  const { data: completion, response } = await client(params.role)
-    .chat.completions.create({
-      model,
-      max_tokens: maxTokensFor(params.role),
-      temperature: temperatureFor(params.role),
-      // 構造化出力。文章ではなく JSON を要求することで、
-      // パースの失敗を「生成失敗」として扱えるようにする
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: params.system },
-        { role: 'user', content: params.user },
-      ],
-    })
-    .withResponse()
+  const request = {
+    model,
+    max_tokens: maxTokensFor(params.role),
+    temperature: temperatureFor(params.role),
+    messages: [
+      { role: 'system' as const, content: params.system },
+      { role: 'user' as const, content: params.user },
+    ],
+  }
+
+  /**
+   * `response_format` を**受け付けないモデルがある。**
+   * OrcaRouter は複数プロバイダをまたぐゲートウェイなので、
+   * OpenAI 互換とはいえ対応状況が揃っていない。
+   *
+   * 400 が返ったら**このパラメータを外して 1 回だけ**やり直す。
+   * 生成前に弾かれた失敗はトークンを消費しないため、退避モデルへ移るより安い。
+   * JSON の抽出はどちらの経路でも `extractJson` が受け持つ。
+   */
+  let completion
+  let response
+  try {
+    const withFormat = await client(params.role)
+      .chat.completions.create({ ...request, response_format: { type: 'json_object' } })
+      .withResponse()
+    completion = withFormat.data
+    response = withFormat.response
+  } catch (cause) {
+    if (!isBadRequest(cause)) throw cause
+    const plain = await client(params.role).chat.completions.create(request).withResponse()
+    completion = plain.data
+    response = plain.response
+  }
 
   const latencyMs = Date.now() - startedAt
   const promptTokens = completion.usage?.prompt_tokens ?? 0
@@ -151,13 +170,8 @@ async function callOnce<T>(
     throw new LlmError(params.role, 'invalid_output', 'max_tokens reached')
   }
 
-  const content = choice?.message?.content ?? ''
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(content)
-  } catch {
-    throw new LlmError(params.role, 'invalid_output', 'not json')
-  }
+  const parsed = extractJson(choice?.message?.content ?? '')
+  if (parsed === undefined) throw new LlmError(params.role, 'invalid_output', 'not json')
 
   const validated = params.schema.safeParse(parsed)
   if (!validated.success) {
@@ -225,6 +239,50 @@ function failedMeta(
 function asLlmError(role: LlmRole, cause: unknown): LlmError {
   if (cause instanceof LlmError) return cause
   return new LlmError(role, 'request_failed')
+}
+
+/** 生成前に弾かれたか（パラメータ非対応など）。トークンを消費していない */
+function isBadRequest(cause: unknown): boolean {
+  return typeof cause === 'object' && cause !== null && 'status' in cause && cause.status === 400
+}
+
+/**
+ * 応答から JSON を取り出す。
+ *
+ * **素の `JSON.parse` では実モデルに耐えない。**
+ * `response_format` を指定しても、あるいは指定できないモデルでは、
+ * ```` ```json ```` で囲む・前置きの一文を添える、といった応答が現れる。
+ * これを「生成失敗」にすると、正しい内容が入っているのに定型テンプレートへ落ち、
+ * 体験が劣化するうえ LLM 料金だけが発生する。
+ *
+ * ただし**寛容にするのは取り出し方だけ**で、中身の検証は Zod が行う。
+ * 構造が違う出力はここを通っても弾かれる。
+ */
+export function extractJson(content: string): unknown {
+  const candidates: string[] = []
+  const trimmed = content.trim()
+  candidates.push(trimmed)
+
+  // ```json ... ``` / ``` ... ``` を剥がす
+  const fenced = /```(?:json)?\s*([\s\S]*?)```/i.exec(trimmed)
+  if (fenced?.[1]) candidates.push(fenced[1].trim())
+
+  // 前後に文が付いている場合に備え、最初の { から最後の } までを試す
+  const start = trimmed.indexOf('{')
+  const end = trimmed.lastIndexOf('}')
+  if (start !== -1 && end > start) candidates.push(trimmed.slice(start, end + 1))
+
+  for (const candidate of candidates) {
+    if (candidate === '') continue
+    try {
+      const parsed: unknown = JSON.parse(candidate)
+      // 配列や数値だけの応答は、このアプリのスキーマでは必ず不正
+      if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) return parsed
+    } catch {
+      // 次の候補を試す
+    }
+  }
+  return undefined
 }
 
 /** MOCK モードの記録。実 LLM を呼んでいないことをログでも判別できるようにする */

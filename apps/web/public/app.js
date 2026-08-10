@@ -68,7 +68,8 @@
     'retrospection', 'retro-question', 'retro-options',
     'report', 'report-gate', 'report-lesson', 'report-stumbling', 'report-steps',
     'score-axes', 'score-total', 'score-formula', 'score-breakdown', 'report-path',
-    'report-answer', 'btn-new-session', 'history-table', 'btn-reload-history',
+    'report-answer', 'cost-summary', 'cost-table',
+    'btn-new-session', 'history-table', 'btn-reload-history',
     'btn-logout', 'wire', 'wire-list', 'btn-clear-wire',
   ]) {
     el[id] = $(id)
@@ -385,6 +386,46 @@
     el['report-answer'].textContent = report.revealedAnswer || '（診断結果がないため表示できません）'
   }
 
+  /**
+   * 実測コスト（F11）。**モデル出し分けが効いていること**を数字で見せる部分。
+   * 高品質は 1〜2 回、安価は 10 回以上、という偏りがそのまま出る。
+   */
+  function renderCost(cost) {
+    clear(el['cost-table'])
+
+    if (!cost.enabled) {
+      el['cost-summary'].textContent = cost.note || ''
+      return
+    }
+    if (cost.calls.length === 0) {
+      el['cost-summary'].textContent =
+        'LLM の呼び出し記録がありません（MOCK モードで実行した場合は記録しません）。'
+      return
+    }
+
+    const s = cost.summary
+    el['cost-summary'].textContent =
+      `${s.callCount} 回（高品質 ${s.quality} / 安価 ${s.cheap}）` +
+      ` — 入力 ${s.promptTokens} tok / 出力 ${s.completionTokens} tok` +
+      ` — 約 ${s.costUsd.toFixed(4)} USD（約 ${s.costJpy.toFixed(1)} 円）` +
+      (s.unknownPrice > 0 ? ` ※単価不明のモデルが ${s.unknownPrice} 件あり合計に含みません` : '')
+
+    el['cost-table'].appendChild(row(['役割', 'モデル', '階層', '入力', '出力', '秒', 'USD'], true))
+    for (const call of cost.calls) {
+      el['cost-table'].appendChild(
+        row([
+          call.role,
+          call.model,
+          call.tier,
+          call.promptTokens,
+          call.completionTokens,
+          (call.latencyMs / 1000).toFixed(1),
+          call.estimatedCostUsd === null ? '単価不明' : call.estimatedCostUsd.toFixed(5),
+        ]),
+      )
+    }
+  }
+
   function renderHistory(sessions) {
     clear(el['history-table'])
     if (sessions.length === 0) {
@@ -561,6 +602,13 @@
     const { data } = await api('GET', `/v1/sessions/${state.session.id}/report`)
     setGateView('report')
     renderReport(data)
+
+    // コストと履歴は本体ではないので、失敗してもレポートの表示を止めない
+    api('GET', `/v1/sessions/${state.session.id}/cost`)
+      .then((res) => renderCost(res.data))
+      .catch(() => {
+        el['cost-summary'].textContent = 'コストの記録を取得できませんでした。'
+      })
     loadHistory().catch(() => {})
     el.history.hidden = false
   }
