@@ -85,11 +85,33 @@ export function getDataStoreClient(): DataStoreClient {
 }
 
 /**
- * SDK の戻り値を素の値に変換する。
- * SDK は成否を例外ではなく `result: 'fail'` で返すことがあるため、
- * **ここで必ず判定する。** 各リポジトリに散らすと見落としが生まれる。
+ * データストア操作を実行し、失敗を必ず `DataStoreError` に揃える。
+ *
+ * **SDK の失敗の伝え方は 2 通りある。**
+ *
+ * | 伝え方 | 例 |
+ * |---|---|
+ * | `result: 'fail'` を返す | データストア側がエラーを返した場合 |
+ * | **例外を投げる** | プロキシ Lambda の呼び出しに失敗した場合（接続不可・認証情報なし） |
+ *
+ * 後者を取りこぼすと、`503 DATASTORE_UNAVAILABLE` ではなく素の 500 になり、
+ * 「画面が止まらず原因が表示される」（FR-17）が成立しない。
+ * **両方をここ 1 箇所で揃える。** 各リポジトリで try/catch を書くと必ず抜けが出る。
+ *
+ * 例外の内容は `detail` に**種別だけ**を残す。メッセージには
+ * 保存しようとしたアイテム（＝エラーテキストやコード断片）が乗りうるため
+ * （security.md §2.3）。原因の詳細は SDK 自身が実行環境のログへ出している。
  */
-export function unwrap<T>(operation: string, result: DsResult<T>): T | undefined {
+export async function run<T>(
+  operation: string,
+  call: () => Promise<DsResult<T>>,
+): Promise<T | undefined> {
+  let result: DsResult<T>
+  try {
+    result = await call()
+  } catch (cause) {
+    throw new DataStoreError(operation, cause instanceof Error ? cause.name : typeof cause)
+  }
   if (result.result === 'fail') throw new DataStoreError(operation, result.error)
   return result.params
 }

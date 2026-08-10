@@ -1,4 +1,4 @@
-import { getDataStoreClient, unwrap } from './client'
+import { getDataStoreClient, run } from './client'
 import { tableId } from './tables'
 import type { AnswerKeysSecret, DiagnosisSecret, RevealSecret, SecretKind } from './types'
 
@@ -7,7 +7,7 @@ import type { AnswerKeysSecret, DiagnosisSecret, RevealSecret, SecretKind } from
  *
  * **このテーブルの内容は公開 API のレスポンスに一切含めない。**
  * `apps/function/src/routes/` からの直接参照は禁止し、`services/` 経由のみとする
- * （packages/README.md）。
+ * （packages/README.md / eslint.config.mjs の no-restricted-imports）。
  *
  * メインキーが `sessionId` で `ownerId` を含まないのは、
  * サブキー（`kind`）で診断・正解・開示文を出し分けるため。
@@ -16,18 +16,16 @@ import type { AnswerKeysSecret, DiagnosisSecret, RevealSecret, SecretKind } from
  */
 
 async function getSecret<T>(sessionId: string, kind: SecretKind): Promise<T | null> {
-  const result = await getDataStoreClient().getItem({
-    tableId: tableId('secrets'),
-    key: { sessionId, kind },
-  })
-  const item = unwrap(`secrets.getItem:${kind}`, result)?.Item
-  return (item as T | undefined) ?? null
+  const params = await run(`secrets.getItem:${kind}`, () =>
+    getDataStoreClient().getItem({ tableId: tableId('secrets'), key: { sessionId, kind } }),
+  )
+  return (params?.Item as T | undefined) ?? null
 }
 
 async function putSecret(item: { sessionId: string; kind: SecretKind }): Promise<void> {
-  await getDataStoreClient()
-    .putItem({ tableId: tableId('secrets'), item })
-    .then((r) => unwrap(`secrets.putItem:${item.kind}`, r))
+  await run(`secrets.putItem:${item.kind}`, () =>
+    getDataStoreClient().putItem({ tableId: tableId('secrets'), item }),
+  )
 }
 
 /** 到達判定（Judge）と Gate C の開示でのみ読む */
@@ -62,11 +60,10 @@ export function putReveal(item: RevealSecret): Promise<void> {
  * **CASCADE がないため関連アイテムを明示的に削除する。**
  */
 export async function deleteSecrets(sessionId: string): Promise<void> {
-  const client = getDataStoreClient()
   const table = tableId('secrets')
   for (const kind of ['diagnosis', 'answerkeys', 'reveal'] as const) {
-    await client
-      .deleteItem({ tableId: table, key: { sessionId, kind } })
-      .then((r) => unwrap(`secrets.deleteItem:${kind}`, r))
+    await run(`secrets.deleteItem:${kind}`, () =>
+      getDataStoreClient().deleteItem({ tableId: table, key: { sessionId, kind } }),
+    )
   }
 }

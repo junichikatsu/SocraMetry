@@ -1,4 +1,4 @@
-import { getDataStoreClient, unwrap } from './client'
+import { getDataStoreClient, run } from './client'
 import type { OwnerId } from './owner'
 import { tableId } from './tables'
 import type { SessionItem } from './types'
@@ -21,23 +21,21 @@ import type { SessionItem } from './types'
  */
 const ORDER_DESC = true
 
-export async function getSession(
-  owner: OwnerId,
-  sessionId: string,
-): Promise<SessionItem | null> {
-  const result = await getDataStoreClient().getItem({
-    tableId: tableId('sessions'),
-    // ★ メインキーに ownerId を含めるため、他人の sessionId では引けない
-    key: { ownerId: owner, sessionId },
-  })
-  const item = unwrap('sessions.getItem', result)?.Item
-  return (item as SessionItem | undefined) ?? null
+export async function getSession(owner: OwnerId, sessionId: string): Promise<SessionItem | null> {
+  const params = await run('sessions.getItem', () =>
+    getDataStoreClient().getItem({
+      tableId: tableId('sessions'),
+      // ★ メインキーに ownerId を含めるため、他人の sessionId では引けない
+      key: { ownerId: owner, sessionId },
+    }),
+  )
+  return (params?.Item as SessionItem | undefined) ?? null
 }
 
 export async function putSession(item: SessionItem): Promise<void> {
-  await getDataStoreClient()
-    .putItem({ tableId: tableId('sessions'), item })
-    .then((r) => unwrap('sessions.putItem', r))
+  await run('sessions.putItem', () =>
+    getDataStoreClient().putItem({ tableId: tableId('sessions'), item }),
+  )
 }
 
 export type SessionPage = {
@@ -53,15 +51,16 @@ export async function listSessions(
   owner: OwnerId,
   options: { limit?: number; startKey?: string } = {},
 ): Promise<SessionPage> {
-  const result = await getDataStoreClient().query({
-    tableId: tableId('sessions'),
-    expression: '#ownerId = :ownerId',
-    values: { ownerId: owner },
-    limit: options.limit ?? 20,
-    ...(options.startKey === undefined ? {} : { startKey: options.startKey }),
-    order: ORDER_DESC,
-  })
-  const params = unwrap('sessions.query', result)
+  const params = await run('sessions.query', () =>
+    getDataStoreClient().query({
+      tableId: tableId('sessions'),
+      expression: '#ownerId = :ownerId',
+      values: { ownerId: owner },
+      limit: options.limit ?? 20,
+      ...(options.startKey === undefined ? {} : { startKey: options.startKey }),
+      order: ORDER_DESC,
+    }),
+  )
   const lastKey = params?.LastEvaluatedKey
   return {
     sessions: (params?.Items ?? []) as SessionItem[],
@@ -70,7 +69,10 @@ export async function listSessions(
 }
 
 export async function deleteSession(owner: OwnerId, sessionId: string): Promise<void> {
-  await getDataStoreClient()
-    .deleteItem({ tableId: tableId('sessions'), key: { ownerId: owner, sessionId } })
-    .then((r) => unwrap('sessions.deleteItem', r))
+  await run('sessions.deleteItem', () =>
+    getDataStoreClient().deleteItem({
+      tableId: tableId('sessions'),
+      key: { ownerId: owner, sessionId },
+    }),
+  )
 }

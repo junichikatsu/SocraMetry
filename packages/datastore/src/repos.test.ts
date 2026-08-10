@@ -107,7 +107,7 @@ describe('session-repo', () => {
     await expect(sessionRepo.getSession(owner, '01J8XK4M2N0000000000000001')).resolves.toBeNull()
   })
 
-  it('SDK が result: fail を返したら例外にする（見落としを作らない）', async () => {
+  it('SDK が result: fail を返したら DataStoreError にする', async () => {
     setDataStoreClient({
       getItem: async () => ({ result: 'fail', error: 'boom' }),
       putItem: async () => ({ result: 'success' }),
@@ -117,6 +117,41 @@ describe('session-repo', () => {
     await expect(sessionRepo.getSession(owner, '01J8XK4M2N0000000000000001')).rejects.toThrow(
       DataStoreError,
     )
+  })
+
+  /**
+   * SDK は**プロキシ Lambda の呼び出しに失敗すると例外を投げる**。
+   * これを取りこぼすと `503 DATASTORE_UNAVAILABLE` ではなく素の 500 になり、
+   * 「画面が止まらず原因が表示される」（FR-17）が成立しない。
+   */
+  it('SDK が例外を投げても DataStoreError に揃える', async () => {
+    const boom = async () => {
+      throw new Error('CredentialsProviderError')
+    }
+    setDataStoreClient({ getItem: boom, putItem: boom, query: boom, deleteItem: boom })
+
+    await expect(sessionRepo.getSession(owner, '01J8XK4M2N0000000000000001')).rejects.toThrow(
+      DataStoreError,
+    )
+    await expect(reportRepo.listReports(owner)).rejects.toThrow(DataStoreError)
+    await expect(secretRepo.getDiagnosis('01J8XK4M2N0000000000000001')).rejects.toThrow(
+      DataStoreError,
+    )
+  })
+
+  it('例外の中身をメッセージに載せない（アイテムが混じりうるため）', async () => {
+    setDataStoreClient({
+      getItem: async () => {
+        throw new Error('failed to put item: {"errorText":"ProductList.tsx で落ちた"}')
+      },
+      putItem: async () => ({ result: 'success' }),
+      query: async () => ({ result: 'success' }),
+      deleteItem: async () => ({ result: 'success' }),
+    })
+
+    await expect(
+      sessionRepo.getSession(owner, '01J8XK4M2N0000000000000001'),
+    ).rejects.toThrow(/^datastore sessions\.getItem failed$/)
   })
 })
 

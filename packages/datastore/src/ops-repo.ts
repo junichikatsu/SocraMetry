@@ -1,4 +1,4 @@
-import { getDataStoreClient, unwrap } from './client'
+import { getDataStoreClient, run } from './client'
 import { tableId } from './tables'
 import type { OpsLogItem } from './types'
 
@@ -17,21 +17,23 @@ import type { OpsLogItem } from './types'
 const ORDER_ASC = false
 
 export async function putOpsLog(item: OpsLogItem): Promise<void> {
-  await getDataStoreClient()
-    .putItem({ tableId: tableId('opsLogs'), item })
-    .then((r) => unwrap('opsLogs.putItem', r))
+  await run('opsLogs.putItem', () =>
+    getDataStoreClient().putItem({ tableId: tableId('opsLogs'), item }),
+  )
 }
 
 /** あるセッションの運用ログを時系列で取得する（A5）。実測コスト表の集計に使う */
 export async function listOpsLogs(sessionId: string, limit = 100): Promise<OpsLogItem[]> {
-  const result = await getDataStoreClient().query({
-    tableId: tableId('opsLogs'),
-    expression: '#sessionId = :sessionId',
-    values: { sessionId },
-    limit,
-    order: ORDER_ASC,
-  })
-  return (unwrap('opsLogs.query', result)?.Items ?? []) as OpsLogItem[]
+  const params = await run('opsLogs.query', () =>
+    getDataStoreClient().query({
+      tableId: tableId('opsLogs'),
+      expression: '#sessionId = :sessionId',
+      values: { sessionId },
+      limit,
+      order: ORDER_ASC,
+    }),
+  )
+  return (params?.Items ?? []) as OpsLogItem[]
 }
 
 /**
@@ -41,11 +43,10 @@ export async function listOpsLogs(sessionId: string, limit = 100): Promise<OpsLo
  */
 export async function deleteOpsLogs(sessionId: string): Promise<void> {
   const logs = await listOpsLogs(sessionId, 1000)
-  const client = getDataStoreClient()
   const table = tableId('opsLogs')
   for (const log of logs) {
-    await client
-      .deleteItem({ tableId: table, key: { sessionId, ts: log.ts } })
-      .then((r) => unwrap('opsLogs.deleteItem', r))
+    await run('opsLogs.deleteItem', () =>
+      getDataStoreClient().deleteItem({ tableId: table, key: { sessionId, ts: log.ts } }),
+    )
   }
 }

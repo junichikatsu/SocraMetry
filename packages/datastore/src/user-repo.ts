@@ -1,4 +1,4 @@
-import { getDataStoreClient, unwrap } from './client'
+import { getDataStoreClient, run } from './client'
 import { tableId } from './tables'
 import type { UserItem } from './types'
 
@@ -14,16 +14,14 @@ import type { UserItem } from './types'
 const KIND = 'account' as const
 
 export async function getUserByEmail(email: string): Promise<UserItem | null> {
-  const result = await getDataStoreClient().getItem({
-    tableId: tableId('users'),
-    key: { email, kind: KIND },
-  })
-  const item = unwrap('users.getItem', result)?.Item
-  return (item as UserItem | undefined) ?? null
+  const params = await run('users.getItem', () =>
+    getDataStoreClient().getItem({ tableId: tableId('users'), key: { email, kind: KIND } }),
+  )
+  return (params?.Item as UserItem | undefined) ?? null
 }
 
 export async function putUser(item: UserItem): Promise<void> {
-  await getDataStoreClient()
-    .putItem({ tableId: tableId('users'), item })
-    .then((r) => unwrap('users.putItem', r))
+  await run('users.putItem', () =>
+    getDataStoreClient().putItem({ tableId: tableId('users'), item }),
+  )
 }
