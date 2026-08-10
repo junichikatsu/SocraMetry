@@ -173,19 +173,23 @@ async function callOnce<T>(
     error: null,
   }
 
+  /**
+   * 生成はできたが使えなかった場合も、**消費したトークンは課金されている。**
+   * 記録を捨てると実測コストが実態より安く出る（F11 の目的が崩れる）。
+   * meta を例外に載せて呼び出し側へ運ぶ。
+   */
+  const reject = (detail: string): LlmError =>
+    new LlmError(params.role, 'invalid_output', detail, [{ ...meta, error: detail }])
+
   const choice = completion.choices[0]
   // 上限に達した出力は**使わない**（途中で切れた JSON を無理に通さない / cost-model.md §3）
-  if (choice?.finish_reason === 'length') {
-    throw new LlmError(params.role, 'invalid_output', 'max_tokens reached')
-  }
+  if (choice?.finish_reason === 'length') throw reject('max_tokens reached')
 
   const parsed = extractJson(choice?.message?.content ?? '')
-  if (parsed === undefined) throw new LlmError(params.role, 'invalid_output', 'not json')
+  if (parsed === undefined) throw reject('not json')
 
   const validated = params.schema.safeParse(parsed)
-  if (!validated.success) {
-    throw new LlmError(params.role, 'invalid_output', 'schema mismatch')
-  }
+  if (!validated.success) throw reject('schema mismatch')
 
   return { data: validated.data, meta }
 }
@@ -207,7 +211,7 @@ export async function callJson<T>(params: JsonCallParams<T>): Promise<LlmResult<
     return { data, calls }
   } catch (primaryError) {
     const fallback = fallbackModel()
-    calls.push(failedMeta(params.role, primary, false, primaryError))
+    calls.push(...metaOfFailure(primaryError, params.role, primary, false))
     if (!fallback || fallback === primary) throw asLlmError(params.role, primaryError, calls)
 
     try {
@@ -215,10 +219,29 @@ export async function callJson<T>(params: JsonCallParams<T>): Promise<LlmResult<
       calls.push(meta)
       return { data, calls }
     } catch (fallbackError) {
-      calls.push(failedMeta(params.role, fallback, true, fallbackError))
+      calls.push(...metaOfFailure(fallbackError, params.role, fallback, true))
       throw asLlmError(params.role, fallbackError, calls)
     }
   }
+}
+
+/**
+ * 失敗の記録を取り出す。
+ *
+ * **生成まで進んで捨てた場合と、生成前に弾かれた場合を区別する。**
+ * 前者はトークンを消費しているので実測に含めなければならず、
+ * 後者は 0 のままでよい。ここを一緒にすると実測コストが実態とずれる。
+ */
+function metaOfFailure(
+  cause: unknown,
+  role: LlmRole,
+  model: string,
+  fallbackUsed: boolean,
+): LlmCallMeta[] {
+  if (cause instanceof LlmError && cause.calls.length > 0) {
+    return cause.calls.map((call) => ({ ...call, fallbackUsed }))
+  }
+  return [failedMeta(role, model, fallbackUsed, cause)]
 }
 
 /**

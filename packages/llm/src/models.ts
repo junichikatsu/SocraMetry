@@ -40,14 +40,26 @@ const MODEL_ENV: Record<LlmRole, string> = {
 /**
  * `max_tokens` は「必要な長さ」から決める。多めに取らない（cost-model.md §3）。
  * 上限に達した場合は生成失敗として扱う（途中で切れた JSON を無理に使わない）。
+ *
+ * **既定値は実測で引き上げた。** cost-model.md の当初の見積もりは英語基準で、
+ * 日本語は 1 文字あたりのトークン消費が大きい。実際に Diagnoser が 800 では
+ * 収まらず、`max_tokens reached` で 2 モデルとも失敗した。
+ *
+ * > **上限を上げてもコストは増えない。** これは上限であって使用量ではなく、
+ * > 実際の課金は生成された長さで決まる。**足りないと全額が無駄になる**
+ * > （切れた JSON は使えないのに、そこまでのトークンは課金される）ため、
+ * > 必要な長さより少し余裕を持たせる方が安い。
  */
 const MAX_TOKENS_ENV: Record<LlmRole, { key: string; fallback: number }> = {
-  diagnoser: { key: 'MAX_TOKENS_DIAGNOSER', fallback: 800 },
-  hinter: { key: 'MAX_TOKENS_HINTER', fallback: 200 },
-  questioner: { key: 'MAX_TOKENS_QUESTIONER', fallback: 500 },
-  judge: { key: 'MAX_TOKENS_JUDGE', fallback: 300 },
-  revealer: { key: 'MAX_TOKENS_REVEALER', fallback: 600 },
-  reporter: { key: 'MAX_TOKENS_REPORTER', fallback: 800 },
+  // rootCause + evidence 5 + focusHints 5 + distractorThemes 6 + gateAHints 3。
+  // 出力項目が最も多い役割で、gateAHints を同じ呼び出しで返す設計（NFR-C5）の分も要る
+  diagnoser: { key: 'MAX_TOKENS_DIAGNOSER', fallback: 1600 },
+  hinter: { key: 'MAX_TOKENS_HINTER', fallback: 300 },
+  // 設問 1 文 + 選択肢 5 + 誤答ごとの誘導文 4
+  questioner: { key: 'MAX_TOKENS_QUESTIONER', fallback: 900 },
+  judge: { key: 'MAX_TOKENS_JUDGE', fallback: 500 },
+  revealer: { key: 'MAX_TOKENS_REVEALER', fallback: 1000 },
+  reporter: { key: 'MAX_TOKENS_REPORTER', fallback: 1000 },
 }
 
 export function modelFor(role: LlmRole): string {

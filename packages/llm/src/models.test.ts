@@ -41,10 +41,21 @@ describe('モデル出し分け（F03 / FR-12）', () => {
 
 describe('max_tokens（F04 / cost-model.md §3）', () => {
   it('役割ごとの既定値を持つ（多めに取らない）', () => {
-    expect(maxTokensFor('diagnoser')).toBe(800)
-    expect(maxTokensFor('hinter')).toBe(200)
-    expect(maxTokensFor('questioner')).toBe(500)
-    expect(maxTokensFor('judge')).toBe(300)
+    expect(maxTokensFor('diagnoser')).toBe(1600)
+    expect(maxTokensFor('hinter')).toBe(300)
+    expect(maxTokensFor('questioner')).toBe(900)
+    expect(maxTokensFor('judge')).toBe(500)
+  })
+
+  /**
+   * 実測で引き上げた経緯を固定する。日本語は 1 文字あたりのトークン消費が
+   * 大きく、当初の英語基準の見積もりでは Diagnoser が収まらなかった。
+   * **足りないと切れた JSON になり、そこまでのトークンが全額無駄になる。**
+   */
+  it('出力項目が最も多い Diagnoser に、他より大きな上限を与える', () => {
+    for (const role of ['hinter', 'questioner', 'judge', 'revealer', 'reporter'] as const) {
+      expect(maxTokensFor('diagnoser'), role).toBeGreaterThan(maxTokensFor(role))
+    }
   })
 
   it('環境変数で上書きできる', () => {
@@ -54,9 +65,9 @@ describe('max_tokens（F04 / cost-model.md §3）', () => {
 
   it('壊れた値は既定に落とす（0 や負数で生成不能にしない）', () => {
     process.env['MAX_TOKENS_QUESTIONER'] = 'abc'
-    expect(maxTokensFor('questioner')).toBe(500)
+    expect(maxTokensFor('questioner')).toBe(900)
     process.env['MAX_TOKENS_QUESTIONER'] = '0'
-    expect(maxTokensFor('questioner')).toBe(500)
+    expect(maxTokensFor('questioner')).toBe(900)
   })
 })
 
