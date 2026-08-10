@@ -80,6 +80,9 @@ curl http://localhost:8787/v1/health
 # {"status":"ok","version":"0.1.0","commit":"local","builtAt":"local","mockMode":false}
 ```
 
+環境変数は**リポジトリのルートの `.env`** から読む（`--env-file-if-exists`）。
+`.env.example` をルートにコピーして使う。存在しなければ何も読まずに起動する。
+
 `commit` にはビルド時のコミット SHA が埋め込まれる（ローカル起動時は `local`）。
 **デプロイ後にこの値を見れば、意図したコミットが実際に動いているかを機械的に確認できる。**
 CI のスモークテストが叩くのもこのエンドポイント。

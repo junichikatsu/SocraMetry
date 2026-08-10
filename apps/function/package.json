@@ -5,7 +5,7 @@
   "type": "module",
   "description": "SocraMetry backend on enebular cloud execution environment",
   "scripts": {
-    "dev": "tsx watch src/local.ts",
+    "dev": "tsx watch --env-file-if-exists=../../.env src/local.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "build:zip": "node build.mjs"
