@@ -44,6 +44,16 @@ function recordingClient(items: Record<string, unknown> = {}): {
 
 const owner = ownerIdOf({ userId: 'usr_9d0e11', email: 'a@b.co', displayName: '佐藤' })
 
+/** 投げられた `DataStoreError` を型のまま取り出す */
+async function captureError(promise: Promise<unknown>): Promise<DataStoreError> {
+  try {
+    await promise
+  } catch (cause) {
+    return cause as DataStoreError
+  }
+  throw new Error('例外が投げられませんでした')
+}
+
 beforeEach(() => {
   process.env['DS_TABLE_SESSIONS'] = 'tbl-sessions'
   process.env['DS_TABLE_SECRETS'] = 'tbl-secrets'
@@ -171,9 +181,7 @@ describe('session-repo', () => {
       deleteItem: async () => ({ result: 'success' }),
     })
 
-    const error = await sessionRepo
-      .getSession(owner, '01J8XK4M2N0000000000000001')
-      .catch((e: unknown) => e as InstanceType<typeof DataStoreError>)
+    const error = await captureError(sessionRepo.getSession(owner, '01J8XK4M2N0000000000000001'))
 
     expect(error.toPublicDetail()).toEqual({
       operation: 'sessions.getItem',
@@ -192,27 +200,24 @@ describe('session-repo', () => {
       deleteItem: async () => ({ result: 'success' }),
     })
 
-    const error = await sessionRepo
-      .getSession(owner, '01J8XK4M2N0000000000000001')
-      .catch((e: unknown) => e as InstanceType<typeof DataStoreError>)
+    const error = await captureError(sessionRepo.getSession(owner, '01J8XK4M2N0000000000000001'))
 
     expect(error.toPublicDetail()).toEqual({ operation: 'sessions.getItem', kind: 'failed' })
     expect(JSON.stringify(error.toPublicDetail())).not.toContain('sato@example.com')
   })
 
-  it('テーブル ID が未設定なら、どのキーが足りないかを返す（値ではないので出してよい）', () => {
+  it('テーブル ID が未設定なら、どのキーが足りないかを返す（値ではないので出してよい）', async () => {
     delete process.env['DS_TABLE_SESSIONS']
-    try {
-      tableId('sessions')
-      expect.unreachable()
-    } catch (e) {
-      const error = e as InstanceType<typeof DataStoreError>
-      expect(error.toPublicDetail()).toEqual({
-        operation: 'resolve-table:sessions',
-        kind: 'unset',
-        errorName: 'DS_TABLE_SESSIONS',
-      })
-    }
+
+    const error = await captureError(
+      Promise.resolve().then(() => tableId('sessions')),
+    )
+
+    expect(error.toPublicDetail()).toEqual({
+      operation: 'resolve-table:sessions',
+      kind: 'unset',
+      errorName: 'DS_TABLE_SESSIONS',
+    })
   })
 })
 
