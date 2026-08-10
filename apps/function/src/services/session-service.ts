@@ -411,7 +411,10 @@ export async function advanceToQuestions(
 
   const diagnosis =
     session.diagnosisStatus === 'ready' ? await secretRepo.getDiagnosis(sessionId) : null
-  const next = await buildQuestion(session, stage, 1, diagnosis)
+  // 診断待ちで 202 を返した後の再送でもここに来る。
+  // 常に 1 問目として扱うと、同段階の出題数がずれてスコアの試行回数が狂う
+  const askedInStage = session.turns.filter((t) => t.kind === 'question' && t.stage === stage).length
+  const next = await buildQuestion(session, stage, askedInStage + 1, diagnosis)
 
   if (next.kind !== 'question') {
     // Lv1 は診断なしで出せる設計なので、通常ここには来ない

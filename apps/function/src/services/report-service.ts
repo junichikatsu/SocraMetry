@@ -13,7 +13,13 @@ import {
   type ReportItem,
   type SessionItem,
 } from '@socrametry/datastore'
-import { FALLBACK_REPORT, generateReport, LlmError, STAGE_LABELS } from '@socrametry/llm'
+import {
+  FALLBACK_REPORT,
+  generateReport,
+  LlmError,
+  STAGE_LABELS,
+  type LlmCallMeta,
+} from '@socrametry/llm'
 import type {
   AuthContext,
   ListSessionsQuery,
@@ -72,7 +78,7 @@ export async function getOrCreateReport(
     generalizedLesson: FALLBACK_REPORT.generalizedLesson,
     nextTimeSteps: [...FALLBACK_REPORT.nextTimeSteps],
   }
-  const calls = []
+  const calls: LlmCallMeta[] = []
   try {
     const generated = await generateReport({
       errorText: session.errorText,

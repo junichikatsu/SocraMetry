@@ -3,7 +3,7 @@ import type { Context, MiddlewareHandler } from 'hono'
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie'
 import { sign, verify } from 'hono/jwt'
 import { jwtSecret } from '../config'
-import { errors } from './error-handler'
+import { ApiError, errors } from './error-handler'
 
 /**
  * 認証（FR-31a / security.md §5）。
@@ -35,7 +35,12 @@ export type AppEnv = { Variables: { auth: AuthContext } }
 
 export async function issueSessionCookie(c: Context, auth: AuthContext): Promise<void> {
   const secret = jwtSecret()
-  if (secret === '') throw errors.dataStoreUnavailable()
+  // 設定漏れを「保存先に接続できない」等の別の原因に見せない。
+  // 切り分けにかかる時間がそのまま損失になるため、原因はそのまま出す
+  // （キーの値は出さない / `/v1/health` の configOk と対応する）
+  if (secret === '') {
+    throw new ApiError(503, 'INTERNAL_ERROR', 'サーバの認証設定が未完了です（SESSION_JWT_SECRET）')
+  }
 
   const exp = Math.floor(Date.now() / 1000) + TTL_SEC
   const token = await sign({ ...auth, exp } satisfies JwtPayload, secret, ALG)
