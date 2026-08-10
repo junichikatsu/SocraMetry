@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { checkConfig } from './config'
 
 /** ビルド時に埋め込まれた情報。tsx でのローカル起動時は定義されない */
 const buildInfo =
@@ -19,16 +20,25 @@ function createRoutes() {
    *
    * commit を返すのは、「デプロイしたつもりのコミットが実際に動いているか」を
    * 目視ではなく機械的に確認するため。ZIP の差し替え漏れはこれで気づける。
+   *
+   * configOk は環境変数の設定漏れの有無（config.ts）。CI のスモークテストが
+   * これを見て落ちるため、設定漏れがデプロイのたびに自動で検出される。
+   * **不足しているキー名はここに出さない。** このエンドポイントは認証不要のため、
+   * 名前は起動時のログにだけ出す。
    */
-  routes.get('/v1/health', (c) =>
-    c.json({
+  routes.get('/v1/health', (c) => {
+    const configIssues = checkConfig()
+
+    return c.json({
       status: 'ok',
       version: buildInfo.version,
       commit: buildInfo.commit,
       builtAt: buildInfo.builtAt,
       mockMode: process.env['MOCK_MODE'] === 'true',
-    }),
-  )
+      configOk: configIssues.length === 0,
+      configMissing: configIssues.length,
+    })
+  })
 
   return routes
 }

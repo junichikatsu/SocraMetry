@@ -55,9 +55,19 @@ await cp('zip-package.json', `${OUT_DIR}/package.json`)
 
 // ── 3) ハンドラが実際に公開されているか、ビルド成果物で検証 ────────────────
 // 文字列の grep ではなく require して確認する。バンドラの出力形が変わっても壊れない。
-const bundled = await import(`node:module`).then(({ createRequire }) =>
-  createRequire(import.meta.url)(`./${OUT_DIR}/index.js`),
-)
+//
+// require するとエントリポイントの起動時処理が走り、環境変数の設定漏れが
+// WARN として出る（config.ts）。ビルド環境に envVars が無いのは当然なので、
+// ここでの警告は無意味なノイズにしかならない。この 1 回だけ抑制する。
+const originalWarn = console.warn
+console.warn = () => {}
+let bundled
+try {
+  const { createRequire } = await import('node:module')
+  bundled = createRequire(import.meta.url)(`./${OUT_DIR}/index.js`)
+} finally {
+  console.warn = originalWarn
+}
 if (typeof bundled.handler !== 'function') {
   throw new Error('バンドル結果に handler がありません（ハンドラ指定は index.handler）')
 }

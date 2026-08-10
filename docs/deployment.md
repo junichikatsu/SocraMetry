@@ -297,27 +297,53 @@ ZIP は決定的にビルドされるため、同じコミットからは同じ 
 
 ## 6. デプロイ前チェックリスト
 
-| # | 確認項目 |
-|---|---|
-| 1 | ZIP のルート直下に `index.js` と `package.json` があるか（`unzip -l` で確認） |
-| 2 | ZIP 内 `package.json` に `"type": "module"` が**ない**か |
-| 3 | ハンドラ指定が `index.handler` になっているか |
-| 4 | ZIP サイズが 250MB 以下か |
-| 5 | `connectDataStore` が有効か |
-| 6 | `envVars` に 5 つのテーブル ID と `ORCAROUTER_API_KEY` が設定されているか |
-| 7 | `OPS_LOG_ENABLED` が `true` か（v0.1 はコスト実測のため有効にする / F11） |
-| 8 | **`MOCK_MODE` が意図した値になっているか**（本番で `true` のまま公開しない） |
-| 9 | `SESSION_JWT_SECRET` と `INVITE_CODE` が既定値（`change-me`）のままでないか |
-| 10 | HTTP トリガーのパスが enebular インスタンス内で一意か |
-| 11 | `timeout` が API 仕様の想定レイテンシ（最大 20 秒）より長いか |
-| 12 | `LOG_LEVEL` が `INFO` 以下か（`DEBUG` 以上は入力内容がログに出うる） |
+| # | 確認項目 | 検証 |
+|---|---|---|
+| 1 | ZIP のルート直下に `index.js` と `package.json` があるか | 自動 |
+| 2 | ZIP 内 `package.json` に `"type": "module"` が**ない**か | 自動 |
+| 3 | ハンドラ指定が `index.handler` になっているか | 自動 |
+| 4 | ZIP サイズが 250MB 以下か | 自動 |
+| 5 | デプロイしたコミットが実際に動いているか | 自動 |
+| 6 | `envVars` に必要なテーブル ID と鍵が設定されているか | 自動 |
+| 7 | `SESSION_JWT_SECRET` と `INVITE_CODE` が既定値（`change-me`）のままでないか | 自動 |
+| 8 | `connectDataStore` が有効か | 手動 |
+| 9 | `OPS_LOG_ENABLED` が `true` か（v0.1 はコスト実測のため有効にする / F11） | 手動 |
+| 10 | **`MOCK_MODE` が意図した値になっているか**（本番で `true` のまま公開しない） | 手動 |
+| 11 | HTTP トリガーのパスが enebular インスタンス内で一意か | 手動 |
+| 12 | `timeout` が API 仕様の想定レイテンシ（最大 20 秒）より長いか | 手動 |
+| 13 | `LOG_LEVEL` が `INFO` 以下か（`DEBUG` 以上は入力内容がログに出うる） | 手動 |
 
-1〜4 は CI で自動チェックする。5〜12 は初回セットアップ時と設定変更時に手動で確認する。
+**自動** = デプロイのたびに CI が検証し、満たさなければワークフローが落ちる。
+1〜4 は ZIP のビルド時（`build.mjs`）と `Verify ZIP layout`、
+5〜7 は `Smoke test` が `/v1/health` の応答を見て判定する。
+
+**手動** = 初回セットアップ時と設定変更時に人が確認する。
+9・10 は「意図した値かどうか」であり、機械には判定できない。
+
+### 6・7 の自動チェックの仕組み
+
+`apps/function/src/config.ts` が、**動作モードに応じて**必須の環境変数を判定する。
+
+| 条件 | 追加で必須になるもの |
+|---|---|
+| 常に | `DS_TABLE_USERS` / `SESSIONS` / `SECRETS` / `REPORTS`、`SESSION_JWT_SECRET`、`INVITE_CODE` |
+| `OPS_LOG_ENABLED=true` | `DS_TABLE_OPS_LOGS` |
+| `MOCK_MODE` が `true` 以外 | `ORCAROUTER_API_KEY`、`MODEL_DIAGNOSER` / `QUESTIONER` / `JUDGE` |
+
+`.env.example` の雛形の値（`00000000-…` / `change-me`）のままなら未設定として扱う。
+
+> **不足しているキー名は `/v1/health` に出さない。** このエンドポイントは認証不要のため、
+> 公開するのは `configOk`（真偽値）と `configMissing`（件数）だけ。
+> キー名は**起動時のログ**（`config.incomplete`）にのみ出力する。値はどこにも出さない。
+
+> **起動を止める形（throw）にはしない。** 設定 1 個の欠けで全リクエストが 500 になると
+> `/v1/health` すら返らず、「関数は動いているのに何も応答しない」という
+> 最も切り分けにくい状態になる。`configOk: false` を返せる状態で立ち上がる方が診断できる。
 
 > **トリガーのパスをアプリ側に設定する必要はない。**
 > アプリは先頭セグメントを問わずルーティングするため、
 > トリガーのパスを変えてもアプリの再設定は要らない（ADR-009）。
 
-> **8 と 9 は特に注意。** `MOCK_MODE=true` のまま公開すると、
+> **10 は特に注意。** `MOCK_MODE=true` のまま公開すると、
 > 固定応答が返っていることに気づかないまま「動いている」と見えてしまう。
-> `INVITE_CODE` が既定値のままだと、招待コード制が実質無効になる。
+> ここだけは自動化できないため、`/v1/health` の `mockMode` を目視で確認する。

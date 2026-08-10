@@ -18,6 +18,52 @@ describe('GET /v1/health', () => {
   })
 })
 
+// CI のスモークテストがこの configOk を見て落ちる。
+// 設定漏れがデプロイのたびに自動で検出される仕組み。
+describe('GET /v1/health の設定チェック', () => {
+  const REQUIRED = {
+    MOCK_MODE: 'true',
+    OPS_LOG_ENABLED: 'false',
+    DS_TABLE_USERS: 'u',
+    DS_TABLE_SESSIONS: 's',
+    DS_TABLE_SECRETS: 'x',
+    DS_TABLE_REPORTS: 'r',
+    SESSION_JWT_SECRET: 'secret',
+    INVITE_CODE: 'code',
+  }
+  const setEnv = (v: Record<string, string | undefined>) => {
+    for (const [k, val] of Object.entries(v)) {
+      if (val === undefined) delete process.env[k]
+      else process.env[k] = val
+    }
+  }
+  const clear = () => setEnv(Object.fromEntries(Object.keys(REQUIRED).map((k) => [k, undefined])))
+
+  it('設定が揃っていれば configOk: true', async () => {
+    setEnv(REQUIRED)
+    const res = await app.request('/v1/health')
+
+    await expect(res.json()).resolves.toMatchObject({ configOk: true, configMissing: 0 })
+    clear()
+  })
+
+  it('不足があれば configOk: false と件数を返す', async () => {
+    setEnv({ ...REQUIRED, DS_TABLE_SECRETS: undefined, INVITE_CODE: undefined })
+    const res = await app.request('/v1/health')
+
+    await expect(res.json()).resolves.toMatchObject({ configOk: false, configMissing: 2 })
+    clear()
+  })
+
+  it('不足しているキー名を公開しない（認証不要のエンドポイントのため）', async () => {
+    setEnv({ ...REQUIRED, DS_TABLE_SECRETS: undefined })
+    const body = await (await app.request('/v1/health')).text()
+
+    expect(body).not.toContain('DS_TABLE_SECRETS')
+    clear()
+  })
+})
+
 // enebular の HTTP トリガーはトリガーパスを含めたパスでハンドラを呼ぶ（実測）。
 // ローカル・テストでは付かないため、両方で同じルートに届く必要がある。
 describe('HTTP トリガーのパス配下', () => {

@@ -1,5 +1,8 @@
 import { serve } from '@hono/node-server'
 import { app } from './app'
+import { logConfigIssues } from './config'
+
+logConfigIssues()
 
 /**
  * ローカル起動（Lambda なし）。デプロイ前の動作確認に使う（NFR-Q3）。
