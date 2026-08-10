@@ -72,11 +72,20 @@ export const errors = {
       'LLM_UNAVAILABLE',
       'AI の応答を取得できませんでした。少し待ってからもう一度お試しください',
     ),
-  dataStoreUnavailable: () =>
+  /**
+   * `detail` に**どの操作がどう失敗したか**を載せる（値は載せない）。
+   *
+   * 「保存先に接続できません」だけでは、設定漏れ・接続不可・データストア側の
+   * エラーのどれなのかが切り分けられず、FR-17（原因が表示される）を満たさない。
+   * 載せるのは操作名・失敗の種別・例外クラス名だけで、
+   * 送信したアイテムや鍵の値は含まない（security.md §2.3）。
+   */
+  dataStoreUnavailable: (detail: unknown = null) =>
     new ApiError(
       503,
       'DATASTORE_UNAVAILABLE',
       'データの保存先に接続できませんでした。少し待ってからもう一度お試しください',
+      detail,
     ),
 }
 
@@ -100,6 +109,8 @@ export function toErrorResponse(err: unknown, c: Context): Response {
       status: apiError.status,
       path: c.req.path,
       method: c.req.method,
+      // 値を含まない識別子のみ（DataStoreError の operation / kind / errorName）
+      ...(apiError.detail === null ? {} : { detail: apiError.detail }),
     }),
   )
 
@@ -120,7 +131,7 @@ export function toErrorResponse(err: unknown, c: Context): Response {
 function normalize(err: unknown): ApiError {
   if (err instanceof ApiError) return err
   if (err instanceof LlmError) return errors.llmUnavailable()
-  if (err instanceof DataStoreError) return errors.dataStoreUnavailable()
+  if (err instanceof DataStoreError) return errors.dataStoreUnavailable(err.toPublicDetail())
 
   // 想定外。**例外メッセージをレスポンスに載せない**（入力値が混じりうる）
   console.log(

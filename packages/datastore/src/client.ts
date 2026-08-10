@@ -36,20 +36,48 @@ export type DataStoreClient = {
   deleteItem(params: { tableId: string; key: unknown }): Promise<DsResult<{ Item: unknown }>>
 }
 
+/** 失敗の伝わり方。**値を含まないのでレスポンスに出してよい** */
+export type DataStoreFailureKind =
+  /** SDK が例外を投げた（接続不可・認証情報なし） */
+  | 'threw'
+  /** SDK が `result: 'fail'` を返した（データストア側のエラー） */
+  | 'failed'
+  /** テーブル ID の環境変数が未設定 */
+  | 'unset'
+
 /**
  * データストアアクセスの失敗。
  * ルート層でこれを `503 DATASTORE_UNAVAILABLE` に写す（api-spec.md §1）。
  *
- * **メッセージに保存しようとした内容を含めない。** 例外経由でエラーテキストや
- * コード断片がログに乗るのを防ぐ（security.md §2.3）。
+ * **公開してよい情報と、してはいけない情報を型で分けている。**
+ * `operation` / `kind` / `errorName` は値を含まない識別子なのでレスポンスに出す。
+ * FR-17（画面が止まらず原因が表示される）を満たすには、
+ * 「保存先に接続できません」だけでは切り分けられないため。
+ *
+ * 一方 `rawMessage` は**どこにも出さない。** SDK のエラーメッセージには
+ * 送信したアイテム（＝エラーテキストやコード断片、メールアドレス）が
+ * 含まれうる（security.md §2.3）。
  */
 export class DataStoreError extends Error {
   constructor(
     readonly operation: string,
-    readonly detail?: string,
+    readonly kind: DataStoreFailureKind,
+    /** 例外クラス名など、値を含まない識別子のみ */
+    readonly errorName?: string,
+    /** ★ログにもレスポンスにも出さない */
+    readonly rawMessage?: string,
   ) {
     super(`datastore ${operation} failed`)
     this.name = 'DataStoreError'
+  }
+
+  /** レスポンスに載せてよい形 */
+  toPublicDetail(): Record<string, string> {
+    return {
+      operation: this.operation,
+      kind: this.kind,
+      ...(this.errorName === undefined ? {} : { errorName: this.errorName }),
+    }
   }
 }
 
@@ -80,7 +108,13 @@ export function getDataStoreClient(): DataStoreClient {
     cached = new CloudDataStoreClient() as DataStoreClient
     return cached
   } catch (cause) {
-    throw new DataStoreError('connect', cause instanceof Error ? cause.name : undefined)
+    // 典型例: connectDataStore が無効で ENEBULAR_DS_JWT が注入されていない
+    throw new DataStoreError(
+      'connect',
+      'threw',
+      cause instanceof Error ? cause.name : typeof cause,
+      cause instanceof Error ? cause.message : undefined,
+    )
   }
 }
 
@@ -110,8 +144,17 @@ export async function run<T>(
   try {
     result = await call()
   } catch (cause) {
-    throw new DataStoreError(operation, cause instanceof Error ? cause.name : typeof cause)
+    throw new DataStoreError(
+      operation,
+      'threw',
+      cause instanceof Error ? cause.name : typeof cause,
+      cause instanceof Error ? cause.message : undefined,
+    )
   }
-  if (result.result === 'fail') throw new DataStoreError(operation, result.error)
+  // `result.error` はデータストア側のメッセージ。キーの値（メールアドレス等）を
+  // 含みうるため rawMessage として持ち、公開もログもしない
+  if (result.result === 'fail') {
+    throw new DataStoreError(operation, 'failed', undefined, result.error)
+  }
   return result.params
 }

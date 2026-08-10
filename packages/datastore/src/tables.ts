@@ -28,6 +28,7 @@ export type TableName = keyof typeof TABLE_ENV_KEYS
 export function tableId(name: TableName): string {
   const key = TABLE_ENV_KEYS[name]
   const value = (process.env[key] ?? '').trim()
-  if (value === '') throw new DataStoreError(`resolve-table:${name}`, 'unset')
+  // 未設定のキー名は返してよい（値ではないため）。どのテーブルの設定漏れかが分かる
+  if (value === '') throw new DataStoreError(`resolve-table:${name}`, 'unset', key)
   return value
 }

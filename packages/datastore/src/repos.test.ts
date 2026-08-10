@@ -153,6 +153,67 @@ describe('session-repo', () => {
       sessionRepo.getSession(owner, '01J8XK4M2N0000000000000001'),
     ).rejects.toThrow(/^datastore sessions\.getItem failed$/)
   })
+
+  /**
+   * 「保存先に接続できません」だけでは、設定漏れ・接続不可・データストア側の
+   * エラーのどれなのかが切り分けられない（FR-17）。
+   * 公開してよい識別子だけを載せる。
+   */
+  it('公開用の detail は値を含まず、失敗の種別が分かる', async () => {
+    setDataStoreClient({
+      getItem: async () => {
+        const e = new Error('Could not load credentials from any providers')
+        e.name = 'CredentialsProviderError'
+        throw e
+      },
+      putItem: async () => ({ result: 'success' }),
+      query: async () => ({ result: 'success' }),
+      deleteItem: async () => ({ result: 'success' }),
+    })
+
+    const error = await sessionRepo
+      .getSession(owner, '01J8XK4M2N0000000000000001')
+      .catch((e: unknown) => e as InstanceType<typeof DataStoreError>)
+
+    expect(error.toPublicDetail()).toEqual({
+      operation: 'sessions.getItem',
+      kind: 'threw',
+      errorName: 'CredentialsProviderError',
+    })
+    // 生のメッセージは公開用に含まれない
+    expect(JSON.stringify(error.toPublicDetail())).not.toContain('credentials from any')
+  })
+
+  it('データストア側のエラーメッセージは公開用に含めない（キーの値が乗りうる）', async () => {
+    setDataStoreClient({
+      getItem: async () => ({ result: 'fail', error: 'no item for sato@example.com' }),
+      putItem: async () => ({ result: 'success' }),
+      query: async () => ({ result: 'success' }),
+      deleteItem: async () => ({ result: 'success' }),
+    })
+
+    const error = await sessionRepo
+      .getSession(owner, '01J8XK4M2N0000000000000001')
+      .catch((e: unknown) => e as InstanceType<typeof DataStoreError>)
+
+    expect(error.toPublicDetail()).toEqual({ operation: 'sessions.getItem', kind: 'failed' })
+    expect(JSON.stringify(error.toPublicDetail())).not.toContain('sato@example.com')
+  })
+
+  it('テーブル ID が未設定なら、どのキーが足りないかを返す（値ではないので出してよい）', () => {
+    delete process.env['DS_TABLE_SESSIONS']
+    try {
+      tableId('sessions')
+      expect.unreachable()
+    } catch (e) {
+      const error = e as InstanceType<typeof DataStoreError>
+      expect(error.toPublicDetail()).toEqual({
+        operation: 'resolve-table:sessions',
+        kind: 'unset',
+        errorName: 'DS_TABLE_SESSIONS',
+      })
+    }
+  })
 })
 
 describe('secret-repo（ADR-005 ★非公開）', () => {
