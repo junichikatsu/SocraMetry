@@ -1,6 +1,12 @@
 # packages/ — 共有パッケージ
 
-> **未実装。** 現在は要件定義フェーズのため、各ディレクトリは構成のプレースホルダです。
+> **v0.1 の実装済み範囲**: `shared` / `core` / `llm` / `datastore` の 4 パッケージ。
+> v0.2 のファイル（`normalization` / `anonymize` / `stats-merge` /
+> `org-repo` / `stats-repo` / `assignment-repo` / `problem-repo`）は作っていません。
+>
+> **各パッケージはビルド工程を持ちません。** `exports` が `src/index.ts` を直接指し、
+> `apps/function` の esbuild と Vitest が TypeScript のまま解決します
+> （ワークスペース内でしか使わないため、中間成果物を作る意味がない）。
 
 | パッケージ | 責務 | 依存 |
 |---|---|---|

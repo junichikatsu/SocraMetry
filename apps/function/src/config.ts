@@ -72,6 +72,80 @@ export function checkConfig(env: Env = process.env): ConfigIssue[] {
   return issues
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  アプリケーション設定
+//
+//  **読み取りは呼び出しのたびに行う。** モジュール読み込み時に固めると、
+//  テストから `process.env` を差し替えても効かず、テストのために本番コードへ
+//  注入口を増やすことになる。読み取りコストは無視できる。
+// ─────────────────────────────────────────────────────────────────────────────
+
+function intValue(env: Env, key: string, fallback: number): number {
+  const parsed = Number.parseInt(value(env, key), 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
+export function isMockMode(env: Env = process.env): boolean {
+  return value(env, 'MOCK_MODE') === 'true'
+}
+
+/** セッション Cookie（JWT）の署名鍵（security.md §5） */
+export function jwtSecret(env: Env = process.env): string {
+  return value(env, 'SESSION_JWT_SECRET')
+}
+
+/** サインアップに必要な招待コード。LLM コストの流出防止も兼ねる（security.md §5） */
+export function inviteCode(env: Env = process.env): string {
+  return value(env, 'INVITE_CODE')
+}
+
+/**
+ * ゲート遷移の待ち時間（未決 Q-3 / Q-4）。
+ *
+ * 確定を待つと実装が始まらないため、**仮の値で先に実装する**方針。
+ * 設定にしてあるので、実測で外れても直すのは 1 行で済む。
+ * デモ用プリセットは `GATE_A_TIMEOUT_MS=60000` / `GATE_B_TIMEOUT_MS=300000`。
+ */
+export function gateTimeouts(env: Env = process.env): { gateAMs: number; gateBMs: number } {
+  return {
+    gateAMs: intValue(env, 'GATE_A_TIMEOUT_MS', 5 * 60 * 1000),
+    gateBMs: intValue(env, 'GATE_B_TIMEOUT_MS', 30 * 60 * 1000),
+  }
+}
+
+/** Gate B の段階数。既定 5。デモで 3 に絞れる（roadmap.md 削る順序 #4） */
+export function demoMaxStages(env: Env = process.env): number | undefined {
+  const raw = value(env, 'DEMO_MAX_STAGES')
+  if (raw === '') return undefined
+  const parsed = Number.parseInt(raw, 10)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
+/** 除外語リスト（FR-11）。社名・製品名を完全一致で伏せる */
+export function maskWordsRaw(env: Env = process.env): string | undefined {
+  const raw = value(env, 'MASK_WORDS')
+  return raw === '' ? undefined : raw
+}
+
+/** 1 セッションの LLM トークン上限（NFR-C1）。超過で 429 を返して打ち切る */
+export function sessionTokenBudget(env: Env = process.env): number {
+  return intValue(env, 'SESSION_TOKEN_BUDGET', 80_000)
+}
+
+/** セッション作成のレート制限（NFR-O3） */
+export function sessionRateLimitPerHour(env: Env = process.env): number {
+  return intValue(env, 'RATE_LIMIT_SESSIONS_PER_HOUR', 10)
+}
+
+/**
+ * コストログを `ops_logs` テーブルに書くか（F11 / data-model.md §3.8）。
+ * **v0.1 は `true`**（実測コスト表を成果物とするため）。
+ * 無効時も標準ログには必ず出す。
+ */
+export function opsLogEnabled(env: Env = process.env): boolean {
+  return value(env, 'OPS_LOG_ENABLED') === 'true'
+}
+
 /**
  * 起動時（コールドスタート）に 1 回だけ呼ぶ。
  * キー名はここにしか出さない。リクエストごとには実行しない。

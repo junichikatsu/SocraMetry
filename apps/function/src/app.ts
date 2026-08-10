@@ -1,5 +1,11 @@
 import { Hono } from 'hono'
 import { checkConfig } from './config'
+import { requireAuth, type AppEnv } from './middleware/auth'
+import { toErrorResponse } from './middleware/error-handler'
+import { authRoutes } from './routes/auth'
+import { gateRoutes } from './routes/gates'
+import { reportRoutes } from './routes/reports'
+import { sessionRoutes } from './routes/sessions'
 
 /** ビルド時に埋め込まれた情報。tsx でのローカル起動時は定義されない */
 const buildInfo =
@@ -12,7 +18,7 @@ const buildInfo =
  * HTTP トリガーは 1 パスしか持てないため、Hono で内部ルーティングする（ADR-009）。
  */
 function createRoutes() {
-  const routes = new Hono()
+  const routes = new Hono<AppEnv>()
 
   /**
    * ヘルスチェック（api-spec.md §GET /v1/health）。
@@ -40,6 +46,22 @@ function createRoutes() {
     })
   })
 
+  /**
+   * **認証の適用をここ 1 箇所にまとめる。**
+   * 各ルートファイルで `requireAuth` を書く方式にすると、
+   * ルートを追加したときに書き忘れる。忘れられる防御は防御ではない。
+   *
+   * `/v1/health` と `/v1/auth/*` だけが認証不要（api-spec.md §1）。
+   */
+  for (const path of ['/v1/sessions', '/v1/sessions/*', '/v1/me', '/v1/me/*']) {
+    routes.use(path, requireAuth)
+  }
+
+  routes.route('/', authRoutes)
+  routes.route('/', sessionRoutes)
+  routes.route('/', gateRoutes)
+  routes.route('/', reportRoutes)
+
   return routes
 }
 
@@ -60,11 +82,19 @@ function createRoutes() {
  * 先頭セグメントを問わない形にすれば、その設定自体が要らなくなる。
  */
 export function createApp() {
-  const app = new Hono()
+  const app = new Hono<AppEnv>()
 
   app.route('/', createRoutes())
   app.route('/:base', createRoutes())
   app.route('/:base/', createRoutes())
+
+  /**
+   * 例外を JSON のエラーレスポンスに変換する（F12 / FR-17）。
+   *
+   * **ここを通らない経路を作らない。** 各ルートで try/catch を書くと変換漏れが起き、
+   * 500 が素で出て「画面が止まらず原因が表示される」を満たせなくなる。
+   */
+  app.onError((err, c) => toErrorResponse(err, c))
 
   /**
    * 受け取ったパスを返す。トリガーのイベント形式が想定と違ったとき、

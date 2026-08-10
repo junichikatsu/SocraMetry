@@ -1,0 +1,24 @@
+{
+  "name": "@socrametry/llm",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "OrcaRouter クライアントと役割別プロンプト（Diagnoser / Hinter / Questioner / Judge / Revealer / Reporter）",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@socrametry/shared": "workspace:*",
+    "openai": "^6.9.0",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.13",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}
