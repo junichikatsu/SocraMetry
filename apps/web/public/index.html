@@ -3,27 +3,37 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>SocraMetry — ログイン</title>
+    <title>SocraMetry</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <!--
-      v0.1 の暫定画面。**登録とログインだけ**を扱う（3 ゲートの問答画面は別途）。
-      フレームワークを使わず、状態はセクションの表示切替で表現する（ADR-013）。
+      ⚠️ 暫定実装。**正式なデザインのフロントエンドで置き換える前提**です。
+
+      目的は 2 つ。
+        1. 3 ゲートの導線が体験として成立しているかを画面で確かめる（F02）
+        2. 全 API を画面から叩けるようにする（curl を不要にする）
+
+      置き換えやすさを優先し、次の形を守っています。
+        - ページ遷移なし。1 枚の HTML の中でセクションの表示を切り替える（ADR-013）
+        - API の呼び出しは app.js の api() に集約（この層は置き換え後も流用できる）
+        - 見た目には投資しない。CSS は 1 枚
     -->
     <header class="site-header">
-      <h1>SocraMetry</h1>
+      <div class="site-header__row">
+        <h1>SocraMetry</h1>
+        <span id="me-chip" class="chip" hidden></span>
+      </div>
       <p class="tagline">AI に答えを出させるのではなく、AI に問いを出させる。</p>
-      <!-- MOCK モードであることを画面に明示する（ADR-014）。
-           本番だと思って見た人が誤解しないようにする -->
       <p id="mock-badge" class="badge badge--mock" hidden>
         MOCK モード — LLM を呼ばず固定応答を返しています
       </p>
       <p id="build-info" class="build-info"></p>
+      <p class="badge badge--draft">暫定画面（デザインは差し替え予定）</p>
     </header>
 
     <main>
-      <!-- ── 未ログイン ─────────────────────────────────────── -->
+      <!-- ══ 未ログイン ══════════════════════════════════════ -->
       <section id="auth" class="card" hidden>
         <nav class="tabs" role="tablist">
           <button id="tab-login" class="tab" type="button" role="tab" aria-selected="true">
@@ -63,47 +73,211 @@
           <label>
             招待コード
             <input name="inviteCode" type="text" required />
-            <!-- 招待コード制の理由は「限定公開」と「LLM コストの流出防止」（security.md §5） -->
             <span class="hint">管理者から受け取ったコードを入力してください</span>
           </label>
           <button class="primary" type="submit">登録して始める</button>
         </form>
       </section>
 
-      <!-- ── ログイン済み ───────────────────────────────────── -->
-      <section id="me" class="card" hidden>
-        <h2>ログインしています</h2>
-        <dl class="kv">
-          <dt>表示名</dt>
-          <dd id="me-name"></dd>
-          <dt>メールアドレス</dt>
-          <dd id="me-email"></dd>
-          <dt>ユーザー ID</dt>
-          <dd id="me-id" class="mono"></dd>
-        </dl>
+      <!-- ══ エラー投稿 ══════════════════════════════════════ -->
+      <section id="compose" class="card" hidden>
+        <h2>詰まっているエラーを貼り付けてください</h2>
+        <form id="form-compose" class="form">
+          <label>
+            エラーテキスト<span class="required">必須</span>
+            <textarea name="errorText" rows="8" maxlength="20000" required
+              placeholder="スタックトレースを含めて、そのまま貼り付けてください"></textarea>
+            <span class="hint"><span id="count-error">0</span> / 20,000 文字</span>
+          </label>
 
-        <div class="actions">
-          <button id="btn-history" class="secondary" type="button">履歴を確認する</button>
-          <button id="btn-logout" class="secondary" type="button">ログアウト</button>
-        </div>
+          <details class="optional">
+            <summary>関係するコードや状況を足す（任意）</summary>
+            <div class="optional__body">
+              <label>
+                コード断片
+                <textarea name="codeSnippet" rows="5" maxlength="10000"></textarea>
+              </label>
+              <label>
+                直前にした変更
+                <input name="recentChange" type="text" maxlength="1000"
+                  placeholder="APIのレスポンス形式を変えた" />
+                <span class="hint">「切り分け」の問いがここから作られます</span>
+              </label>
+              <div class="row">
+                <label>
+                  言語
+                  <select name="language" id="select-language"></select>
+                </label>
+                <label>
+                  フレームワーク
+                  <select name="framework" id="select-framework"></select>
+                </label>
+              </div>
+            </div>
+          </details>
 
-        <p id="history-result" class="note" hidden></p>
+          <button class="primary" type="submit">エラーを見てもらう</button>
+        </form>
 
         <p class="note">
-          問答の画面はまだありません。ここまでで、認証とデータの保存が動いていることを確認できます。
+          入力は診断のため外部の LLM に送信されます。API キー・トークン・メールアドレス・
+          絶対パスは<strong>送信前にサーバ側で自動的に伏せます</strong>が、
+          <strong>顧客名などの固有名詞は自動では消えません</strong>。
         </p>
       </section>
 
+      <!-- ══ セッション進行（Gate A / B / C）════════════════════ -->
+      <section id="session" hidden>
+        <!-- 進行状況 -->
+        <div class="card progress">
+          <div class="progress__gates">
+            <span class="gate" data-gate="A">Gate A ヒント</span>
+            <span class="gate" data-gate="B">Gate B 設問</span>
+            <span class="gate" data-gate="C">Gate C 解説</span>
+          </div>
+          <ol id="stage-list" class="stages" hidden></ol>
+          <p id="diagnosis-state" class="note"></p>
+        </div>
+
+        <!-- ── Gate A: ヒント ── -->
+        <div id="gate-a" class="card" hidden>
+          <h2>着眼点のヒント</h2>
+          <ul id="hint-list" class="hints"></ul>
+          <div class="actions">
+            <button id="btn-hint" class="secondary" type="button">もっとヒントが欲しい</button>
+            <button id="btn-advance" class="secondary" type="button">設問に進む</button>
+            <button id="btn-declare-a" class="primary" type="button">原因が分かった</button>
+          </div>
+          <p class="note">
+            ここで自力で解けるのが最良の結末です。設問に進むと<strong>戻れません</strong>。
+          </p>
+        </div>
+
+        <!-- ── Gate B: 設問 ── -->
+        <div id="gate-b" class="card" hidden>
+          <h2 id="question-stage" class="stage-label"></h2>
+          <p id="question-body" class="question"></p>
+          <div id="option-list" class="options"></div>
+          <p id="answer-feedback" class="feedback" hidden></p>
+          <div class="actions">
+            <button id="btn-hint-b" class="secondary" type="button">ヒントが欲しい</button>
+            <button id="btn-declare-b" class="primary" type="button">原因が分かった</button>
+            <button id="btn-reveal" class="secondary" type="button" hidden>解説を読む</button>
+          </div>
+        </div>
+
+        <!-- ── 原因宣言 ── -->
+        <div id="conclusion" class="card" hidden>
+          <h2>何が原因だと思いますか？</h2>
+          <form id="form-conclusion" class="form">
+            <label>
+              自分の言葉で書いてください
+              <textarea name="body" rows="3" maxlength="2000" required
+                placeholder="APIの応答が返る前の初回レンダリングで items が undefined になっていた"></textarea>
+            </label>
+            <div class="actions">
+              <button class="primary" type="submit">判定してもらう</button>
+              <button id="btn-conclusion-cancel" class="secondary" type="button">やめる</button>
+            </div>
+          </form>
+          <p id="conclusion-feedback" class="feedback" hidden></p>
+          <div id="conclusion-choices" class="actions" hidden>
+            <button id="btn-back-to-questions" class="secondary" type="button">設問に戻る</button>
+            <button id="btn-reveal-2" class="secondary" type="button">解説を読む</button>
+          </div>
+        </div>
+
+        <!-- ── Gate C: 開示 ── -->
+        <div id="gate-c" class="card" hidden>
+          <h2>解説</h2>
+          <p class="note">
+            開示は敗北ではありません。業務を止めないための、正しい着地点の一つです。
+          </p>
+          <dl class="reveal">
+            <dt>原因</dt>
+            <dd id="reveal-cause"></dd>
+            <dt>根拠</dt>
+            <dd><ul id="reveal-evidence"></ul></dd>
+            <dt>修正方針</dt>
+            <dd id="reveal-fix"></dd>
+            <dt>再発防止</dt>
+            <dd id="reveal-prevention"></dd>
+          </dl>
+
+          <div id="retrospection" class="retro">
+            <h3 id="retro-question"></h3>
+            <div id="retro-options" class="options"></div>
+          </div>
+        </div>
+
+        <!-- ── 結果 ── -->
+        <div id="report" class="card" hidden>
+          <h2>振り返り</h2>
+          <p id="report-gate" class="reached"></p>
+
+          <h3>一般化された学び</h3>
+          <p id="report-lesson" class="lesson"></p>
+
+          <h3>つまずいたところ</h3>
+          <p id="report-stumbling"></p>
+
+          <h3>次に同じ状況に出会ったら</h3>
+          <ol id="report-steps"></ol>
+
+          <h3>デバッグ脳スコア</h3>
+          <div id="score-axes" class="axes"></div>
+          <p id="score-total" class="total"></p>
+          <details class="optional">
+            <summary>算出根拠を見る</summary>
+            <div class="optional__body">
+              <p id="score-formula" class="mono"></p>
+              <table id="score-breakdown" class="breakdown"></table>
+            </div>
+          </details>
+
+          <h3>辿った道筋</h3>
+          <table id="report-path" class="breakdown"></table>
+
+          <h3>答え</h3>
+          <p id="report-answer"></p>
+
+          <div class="actions">
+            <button id="btn-new-session" class="primary" type="button">次のエラーを投げる</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══ 履歴 ══════════════════════════════════════════ -->
+      <section id="history" class="card" hidden>
+        <h2>これまでのセッション</h2>
+        <table id="history-table" class="breakdown"></table>
+        <div class="actions">
+          <button id="btn-reload-history" class="secondary" type="button">読み込み直す</button>
+          <button id="btn-logout" class="secondary" type="button">ログアウト</button>
+        </div>
+      </section>
+
+      <!-- 「先輩が考えている」演出（ADR-007）。技術的制約を世界観に吸収させる -->
+      <p id="thinking" class="thinking" hidden></p>
+
       <!-- 異常系は必ず画面に出す。原因が分からず止まる状態を作らない（F12 / FR-17） -->
       <p id="error" class="error" hidden></p>
-    </main>
 
-    <footer class="site-footer">
-      <p>
-        入力されたエラーテキストは、診断のため外部の LLM に送信されます。API キーやトークンなどは
-        送信前に自動で伏せますが、<strong>顧客名などの固有名詞は自動では消えません</strong>。
-      </p>
-    </footer>
+      <!-- ══ 生レスポンス（API 確認用）══════════════════════ -->
+      <details id="wire" class="wire">
+        <summary>生レスポンス（API の確認用）</summary>
+        <div class="wire__body">
+          <p class="note">
+            直近 30 件のリクエストを新しい順に表示します。<code>202</code> の再送や
+            <code>409</code> の遷移条件など、画面では見えない挙動の確認に使えます。
+          </p>
+          <div class="actions">
+            <button id="btn-clear-wire" class="secondary" type="button">消す</button>
+          </div>
+          <ol id="wire-list" class="wire__list"></ol>
+        </div>
+      </details>
+    </main>
 
     <script src="app.js"></script>
   </body>
