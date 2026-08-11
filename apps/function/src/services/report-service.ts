@@ -114,6 +114,8 @@ export async function getOrCreateReport(
   const { score, explanation } = calculateScore({
     outcomes: outcomesOf(session),
     reachedGate: session.reachedGate,
+    // 出題する段階数。対象外の軸を 0 点にしない（scope-v0.1 削る順序 #4）
+    totalStages: session.totalStages,
     previousTotal,
     // 実務モードは横比較に使わない（NFR-F2）。データ構造で守る
     comparable: session.mode === 'assessment',
@@ -340,13 +342,23 @@ export async function getMyStats(auth: AuthContext): Promise<MeStatsPublic> {
   }
 }
 
+/**
+ * 直近セッションの 5 軸平均。
+ *
+ * **出題対象外（null）の軸は平均に混ぜない。** 段階数を絞った運用では
+ * 検証・修正が出題されないことがあり、それを 0 として平均すると
+ * 「使えば使うほど下がる軸」ができてしまう。
+ * 一度も採点されていない軸は `null` のままにする。
+ */
 function averageAxes(reports: readonly ReportItem[]): ScoreAxes {
-  const sum: ScoreAxes = { observe: 0, localize: 0, hypothesize: 0, verify: 0, fix: 0 }
-  for (const report of reports) {
-    for (const stage of STAGES) sum[stage] += report.score[stage]
+  const axes: ScoreAxes = { observe: null, localize: null, hypothesize: null, verify: null, fix: null }
+  for (const stage of STAGES) {
+    const values = reports
+      .map((report) => report.score[stage])
+      .filter((value): value is number => value !== null && value !== undefined)
+    if (values.length === 0) continue
+    axes[stage] = Math.round(values.reduce((a, b) => a + b, 0) / values.length)
   }
-  const axes = { ...sum }
-  for (const stage of STAGES) axes[stage] = Math.round(sum[stage] / reports.length)
   return axes
 }
 

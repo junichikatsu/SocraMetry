@@ -89,8 +89,59 @@ describe('calculateScore', () => {
     expect(explanation.breakdown).toHaveLength(STAGES.length)
     expect(explanation.formula).toContain('gate_factor')
     for (const row of explanation.breakdown) {
-      expect(row.base * row.hintPenalty * row.difficultyFactor).toBeCloseTo(row.result, 0)
+      expect(row.base * row.hintPenalty * row.difficultyFactor).toBeCloseTo(row.result ?? 0, 0)
     }
+  })
+
+  /**
+   * `DEMO_MAX_STAGES=3` の運用で実測したときに見つかった不具合。
+   * 出題されない検証・修正を 0 点として合計に混ぜていたため、
+   * **3 段階すべて正解しても総合が 49 点**になっていた。
+   */
+  describe('段階数を絞った運用（scope-v0.1 削る順序 #4）', () => {
+    const threeStages = () =>
+      STAGES.slice(0, 3).map((s) => outcome(s)).concat(
+        STAGES.slice(3).map((s) => outcome(s, { asked: false, attempts: 0, solved: false })),
+      )
+
+    it('対象外の軸は 0 ではなく null（出題対象外）にする', () => {
+      const { score } = calculateScore({
+        outcomes: threeStages(),
+        reachedGate: 'C',
+        totalStages: 3,
+      })
+      expect(score.observe).toBe(100)
+      expect(score.verify).toBeNull()
+      expect(score.fix).toBeNull()
+    })
+
+    it('対象の軸だけで正規化する（3 段階すべて正解なら満点相当）', () => {
+      const { score } = calculateScore({
+        outcomes: threeStages(),
+        reachedGate: 'C',
+        totalStages: 3,
+      })
+      // 100 × gate_factor 0.75。0 点の軸に引きずられない
+      expect(score.total).toBe(75)
+    })
+
+    it('対象外であることを算出根拠に明記する', () => {
+      const { explanation } = calculateScore({
+        outcomes: threeStages(),
+        reachedGate: 'C',
+        totalStages: 3,
+      })
+      const fix = explanation.breakdown.find((row) => row.axis === 'fix')
+      expect(fix?.result).toBeNull()
+      expect(fix?.weight).toBe(0)
+      expect(fix?.note).toContain('対象外')
+    })
+
+    it('既定（5 段階）では従来どおり全軸を採点する', () => {
+      const { score } = calculateScore({ outcomes: allAsked(), reachedGate: 'B' })
+      expect(score.fix).toBe(100)
+      expect(score.total).toBe(90)
+    })
   })
 
   it('同じ入力からは常に同じスコアが出る（NFR-Q4）', () => {
@@ -104,5 +155,18 @@ describe('weakestAxis', () => {
     expect(
       weakestAxis({ observe: 88, localize: 71, hypothesize: 76, verify: 58, fix: 72 }),
     ).toBe('verify')
+  })
+
+  /** 出題していない軸を「弱点」として提示すると、示唆そのものが誤りになる */
+  it('出題対象外（null）の軸は候補に入れない', () => {
+    expect(
+      weakestAxis({ observe: 88, localize: 71, hypothesize: 76, verify: null, fix: null }),
+    ).toBe('localize')
+  })
+
+  it('採点対象が 1 つも無ければ null', () => {
+    expect(
+      weakestAxis({ observe: null, localize: null, hypothesize: null, verify: null, fix: null }),
+    ).toBeNull()
   })
 })

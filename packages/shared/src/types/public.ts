@@ -103,12 +103,7 @@ export type ConclusionResultPublic = {
   skipped?: boolean
 }
 
-export type ScorePublic = {
-  observe: number
-  localize: number
-  hypothesize: number
-  verify: number
-  fix: number
+export type ScorePublic = ScoreAxes & {
   total: number
   gateFactor: number
   difficultyFactor: number
@@ -131,8 +126,10 @@ export type ScoreExplanationPublic = {
     base: number
     hintPenalty: number
     difficultyFactor: number
+    /** 対象の軸だけで正規化した重み。対象外は 0 */
     weight: number
-    result: number
+    /** 出題対象外なら null */
+    result: number | null
     /** 出題されなかった段階の扱いを利用者に説明するための注記 */
     note?: string
   }>
@@ -190,12 +187,19 @@ export type MeStatsPublic = {
   trend: Array<{ sessionId: string; total: number; gate: Gate | null; at: number }>
 }
 
+/**
+ * 5 軸のスコア。
+ *
+ * **`null` は「出題対象外」を表す。** `DEMO_MAX_STAGES` で段階数を絞ると、
+ * 対象外の軸はそもそも出題されない。0 と区別できないと
+ *「何もしていないのに 0 点」と読めてしまう（scope-v0.1.md 削る順序 #4）。
+ */
 export type ScoreAxes = {
-  observe: number
-  localize: number
-  hypothesize: number
-  verify: number
-  fix: number
+  observe: number | null
+  localize: number | null
+  hypothesize: number | null
+  verify: number | null
+  fix: number | null
 }
 
 export type MePublic = {

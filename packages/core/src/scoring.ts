@@ -1,10 +1,12 @@
 import {
   STAGES,
   type Gate,
+  type ScoreAxes,
   type ScoreExplanationPublic,
   type ScorePublic,
   type Stage,
 } from '@socrametry/shared'
+import { resolveTotalStages } from './stage-machine'
 
 /**
  * スコア算出（FR-21 / evaluation-model.md §3）。
@@ -75,6 +77,8 @@ export type ScoreInput = {
   outcomes: readonly StageOutcome[]
   reachedGate: Gate | null
   difficultyFactor?: number
+  /** Gate B で出題する段階数（既定 5 / `DEMO_MAX_STAGES`）。対象外の軸は null になる */
+  totalStages?: number
   previousTotal?: number | null
   /** 横比較に使ってよいか。実務モードは常に false（NFR-F2） */
   comparable?: boolean
@@ -131,19 +135,46 @@ export function calculateScore(input: ScoreInput): {
   const difficultyFactor = input.difficultyFactor ?? V01_DIFFICULTY_FACTOR
   const gateFactor = GATE_FACTORS[input.reachedGate ?? 'C']
   const creditUnasked = creditsUnaskedStages(input.reachedGate)
+  /**
+   * **段階数を絞った運用では、対象外の軸を 0 点にしない。**
+   *
+   * `DEMO_MAX_STAGES=3` のとき、検証と修正はそもそも出題されない。
+   * それを 0 点として合計に混ぜると、全問正解しても総合が半分近くまで落ちる
+   * （実測: 3 段階すべて正解・Gate C 到達で 49 点）。
+   * 利用者から見れば「何もしていないのに減点された」ことになり、
+   * NFR-F1（算出根拠を説明できる）を満たせない。
+   *
+   * scope-v0.1.md の削る順序 #4 も「Lv1〜3 にすると**5 軸スコアが 3 軸になる**」
+   * としている。対象外の軸は `null`（出題対象外）とし、重みは対象の軸で正規化する。
+   */
+  const inScope = STAGES.slice(0, resolveTotalStages(input.totalStages))
+  const weightSum = inScope.reduce((sum, stage) => sum + STAGE_WEIGHTS[stage], 0)
 
   const byStage = new Map(input.outcomes.map((o) => [o.stage, o]))
-  const axes: Record<Stage, number> = {
-    observe: 0,
-    localize: 0,
-    hypothesize: 0,
-    verify: 0,
-    fix: 0,
+  const axes: ScoreAxes = {
+    observe: null,
+    localize: null,
+    hypothesize: null,
+    verify: null,
+    fix: null,
   }
   const breakdown: ScoreExplanationPublic['breakdown'] = []
   let weighted = 0
 
   for (const stage of STAGES) {
+    if (!inScope.includes(stage)) {
+      breakdown.push({
+        axis: stage,
+        base: 0,
+        hintPenalty: 1,
+        difficultyFactor,
+        weight: 0,
+        result: null,
+        note: `この運用では Lv1〜${inScope.length} までを出題するため、対象外です`,
+      })
+      continue
+    }
+
     const outcome = byStage.get(stage)
     const asked = outcome?.asked ?? false
     const hintLevel = outcome?.hintLevel ?? 0
@@ -162,7 +193,8 @@ export function calculateScore(input: ScoreInput): {
 
     const penalty = hintPenalty(hintLevel)
     const stageScore = Math.round(base * penalty * difficultyFactor)
-    const weight = STAGE_WEIGHTS[stage]
+    // 対象の軸だけで正規化する。段階数を絞っても満点が 100 のままになる
+    const weight = STAGE_WEIGHTS[stage] / weightSum
 
     axes[stage] = stageScore
     weighted += stageScore * weight
@@ -171,7 +203,7 @@ export function calculateScore(input: ScoreInput): {
       base,
       hintPenalty: penalty,
       difficultyFactor,
-      weight,
+      weight: Math.round(weight * 100) / 100,
       result: stageScore,
       ...(note === undefined ? {} : { note }),
     })
@@ -198,7 +230,16 @@ export function calculateScore(input: ScoreInput): {
   }
 }
 
-/** 5 軸のうち最も低い軸。育成の示唆に使う（evaluation-model.md §5.2） */
-export function weakestAxis(axes: Record<Stage, number>): Stage {
-  return STAGES.reduce((worst, stage) => (axes[stage] < axes[worst] ? stage : worst), STAGES[0])
+/**
+ * 最も低い軸。育成の示唆に使う（evaluation-model.md §5.2）。
+ * **出題対象外（null）の軸は候補に入れない。** 出題していない軸を
+ *「弱点」として提示すると、示唆そのものが誤りになる。
+ */
+export function weakestAxis(axes: ScoreAxes): Stage | null {
+  const scored = STAGES.filter((stage) => axes[stage] !== null)
+  if (scored.length === 0) return null
+  return scored.reduce(
+    (worst, stage) => ((axes[stage] ?? 0) < (axes[worst] ?? 0) ? stage : worst),
+    scored[0] as Stage,
+  )
 }

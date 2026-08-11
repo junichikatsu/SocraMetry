@@ -345,12 +345,17 @@
       wrap.appendChild(text('span', stage.name, 'axis__name'))
       const bar = document.createElement('div')
       bar.className = 'axis__bar'
-      const fill = document.createElement('div')
-      fill.className = 'axis__fill'
-      fill.style.width = `${Math.max(0, Math.min(100, value))}%`
-      bar.appendChild(fill)
+      // null は「出題対象外」。0 点と区別する（段階数を絞った運用）
+      if (value !== null && value !== undefined) {
+        const fill = document.createElement('div')
+        fill.className = 'axis__fill'
+        fill.style.width = `${Math.max(0, Math.min(100, value))}%`
+        bar.appendChild(fill)
+      }
       wrap.appendChild(bar)
-      wrap.appendChild(text('span', String(value), 'axis__value'))
+      wrap.appendChild(
+        text('span', value === null || value === undefined ? '—' : String(value), 'axis__value'),
+      )
       el['score-axes'].appendChild(wrap)
     }
 
@@ -367,7 +372,14 @@
     el['score-breakdown'].appendChild(row(['軸', 'base', 'ヒント係数', '難易度係数', '結果', '備考'], true))
     for (const line of report.scoreExplanation.breakdown) {
       el['score-breakdown'].appendChild(
-        row([stageName(line.axis), line.base, line.hintPenalty, line.difficultyFactor, line.result, line.note || '']),
+        row([
+          stageName(line.axis),
+          line.base,
+          line.hintPenalty,
+          line.difficultyFactor,
+          line.result === null ? '対象外' : line.result,
+          line.note || '',
+        ]),
       )
     }
 
