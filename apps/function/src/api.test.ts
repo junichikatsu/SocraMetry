@@ -283,6 +283,56 @@ describe('先行診断（ADR-006 / FR-13）', () => {
   })
 })
 
+/**
+ * ADR-006 は診断を**別リクエストとして並行実行**させる。
+ * その間に利用者は Gate B へ進み、回答している。
+ * どちらかが古いコピーを丸ごと書き戻すと、進行か診断状態が失われる。
+ * 実環境で「DIAGNOSIS_TIMEOUT が返り続ける」として表面化した。
+ */
+describe('診断と操作の並行実行（ADR-006）', () => {
+  it('診断の完了が、その間に進んだ Gate B の状態を消さない', async () => {
+    const cookie = await signIn()
+    const id = (await startSession(cookie)).session.id
+
+    // 診断がセッションを読んだ直後に、利用者が Gate B へ進んだ状況を作る
+    store.interceptAfterNextGet(() => {
+      const session = store.dump('sessions')[0] as Json
+      session['gate'] = 'B'
+      session['currentStage'] = 'observe'
+    })
+    await call('POST', `/v1/sessions/${id}/diagnose`, { cookie })
+
+    const state = await call('GET', `/v1/sessions/${id}`, { cookie })
+    expect(state.body.session.gate).toBe('B')
+    expect(state.body.session.diagnosisStatus).toBe('ready')
+  })
+
+  it('diagnosisStatus が古くても、診断が保存されていれば設問を返す', async () => {
+    const cookie = await signIn()
+    const id = (await startSession(cookie)).session.id
+    await call('POST', `/v1/sessions/${id}/diagnose`, { cookie })
+
+    // 並行更新で pending に巻き戻された状態を再現する
+    const stored = store.dump('sessions')[0] as Json
+    stored['diagnosisStatus'] = 'pending'
+
+    const advanced = await call('POST', `/v1/sessions/${id}/advance`, { cookie })
+    const answered = await call('POST', `/v1/sessions/${id}/answers`, {
+      cookie,
+      body: {
+        questionId: advanced.body.question.id,
+        selectedOptionId: correctOptionFor(id, 1),
+      },
+    })
+
+    // 202 で待たされず、次の設問まで進む
+    expect(answered.status).toBe(200)
+    expect(answered.body.nextQuestion).not.toBeNull()
+    // 状態そのものも修復される
+    expect(answered.body.session.diagnosisStatus).toBe('ready')
+  })
+})
+
 describe('Gate B — 段階的出題（FR-04 / FR-06）', () => {
   async function enterGateB(cookie: string) {
     const id = (await startSession(cookie)).session.id

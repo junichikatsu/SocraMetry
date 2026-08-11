@@ -271,9 +271,56 @@ export async function runDiagnosis(
     session.diagnosisStatus = 'failed'
   }
 
-  await sessionRepo.putSession(session)
+  /**
+   * **20 秒前に読んだセッションを丸ごと書き戻してはいけない。**
+   *
+   * 診断は 20 秒級の処理で、その間に利用者は Gate B へ進み、設問に回答している。
+   * 古いコピーを書くと、その進行がまるごと消える（実測で再現）。
+   * 逆順（利用者側の書き込みが後）なら `diagnosisStatus` が `pending` に戻り、
+   * 以降の設問が永久に 202 を返し続ける。
+   *
+   * data-model.md §4 は「セッションは単一ユーザーの逐次操作が前提」としているが、
+   * **ADR-006 が意図的に並行リクエストを作っている**ため、その前提は成り立たない。
+   * 直前に読み直し、**診断に属するフィールドだけ**を移す。
+   */
+  await mergeDiagnosisResult(auth, sessionId, session)
   return { diagnosisStatus: session.diagnosisStatus }
 }
+
+async function mergeDiagnosisResult(
+  auth: AuthContext,
+  sessionId: string,
+  updated: SessionItem,
+): Promise<void> {
+  const latest = await sessionRepo.getSession(ownerIdOf(auth), sessionId)
+  const target = latest ?? updated
+  target.diagnosisStatus = updated.diagnosisStatus
+  target.difficulty = updated.difficulty
+  // トークンは加算値なので、最新のセッションに対して差分を足す
+  target.tokenUsed = Math.max(target.tokenUsed, updated.tokenUsed)
+  await sessionRepo.putSession(target)
+}
+
+/**
+ * 診断が使えるかどうかは、**`session_secrets` にアイテムがあるか**で決まる。
+ * `sessions.diagnosisStatus` はその写しにすぎず、並行更新で古くなりうる。
+ * 実際に `pending` のまま固まって設問が返らなくなる事象が起きた。
+ *
+ * 読み出した結果で状態を**自己修復**するので、一度でも取得できれば復帰する。
+ */
+async function loadDiagnosis(session: SessionItem): Promise<DiagnosisSecret | null> {
+  if (session.diagnosisStatus === 'failed') return null
+
+  const diagnosis = await secretRepo.getDiagnosis(session.sessionId)
+  if (diagnosis && session.diagnosisStatus !== 'ready') session.diagnosisStatus = 'ready'
+  return diagnosis
+}
+
+/**
+ * 診断を待つ上限。これを過ぎたら**汎用モードで出題を続ける**（FR-15 / NFR-O4）。
+ * 「エラーを投げたのに何も返ってこない」状態を作らないことを優先する。
+ */
+const DIAGNOSIS_WAIT_LIMIT_MS = 45_000
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  POST /v1/sessions/:id/hints — ヒント開放（Gate A / B 共通）
@@ -338,8 +385,18 @@ async function buildQuestion(
    * 「エラーメッセージは何が undefined だと言っているか」は原因を知らずに問える。
    * Lv2 以降は `focusHints` が要るため、診断が終わるまで待たせる（202 Accepted）。
    */
-  if (stage !== 'observe' && session.diagnosisStatus === 'pending') {
-    return { kind: 'pending' }
+  const waitedTooLong = Date.now() - session.startedAt > DIAGNOSIS_WAIT_LIMIT_MS
+  if (stage !== 'observe' && diagnosis === null && session.diagnosisStatus === 'pending') {
+    // 待ち続けて詰ませない。上限を過ぎたら焦点なしで出題する（体験は劣化するが継続できる）
+    if (!waitedTooLong) return { kind: 'pending' }
+    console.log(
+      JSON.stringify({
+        level: 'WARN',
+        event: 'diagnosis.wait_exceeded',
+        sessionId: session.sessionId,
+        stage,
+      }),
+    )
   }
 
   assertTokenBudget(session)
@@ -420,8 +477,7 @@ export async function advanceToQuestions(
   const stage = session.currentStage
   if (!stage) return { session: toSessionPublic(session), question: null }
 
-  const diagnosis =
-    session.diagnosisStatus === 'ready' ? await secretRepo.getDiagnosis(sessionId) : null
+  const diagnosis = await loadDiagnosis(session)
   // 診断待ちで 202 を返した後の再送でもここに来る。
   // 常に 1 問目として扱うと、同段階の出題数がずれてスコアの試行回数が狂う
   const askedInStage = session.turns.filter((t) => t.kind === 'question' && t.stage === stage).length
@@ -493,7 +549,7 @@ export async function submitAnswer(
    */
   const [answerKeys, diagnosis] = await Promise.all([
     secretRepo.getAnswerKeys(sessionId),
-    session.diagnosisStatus === 'ready' ? secretRepo.getDiagnosis(sessionId) : Promise.resolve(null),
+    loadDiagnosis(session),
   ])
 
   const alreadyAnswered = turn.answeredAt !== undefined
@@ -684,7 +740,8 @@ export async function declareConclusion(
     )
   }
 
-  if (session.diagnosisStatus === 'pending') {
+  const diagnosis = await loadDiagnosis(session)
+  if (!diagnosis && session.diagnosisStatus === 'pending') {
     // 到達判定は診断が無いと成立しない。**回答は捨てずに待たせる**
     return respond(
       { verdict: null, skipped: true, feedback: '内容を確認しています。少しお待ちください。' },
@@ -693,7 +750,6 @@ export async function declareConclusion(
     )
   }
 
-  const diagnosis = await secretRepo.getDiagnosis(sessionId)
   if (!diagnosis) {
     // 診断が失敗したセッション。**判定できないことを正直に返す**（勝手に reached にしない）
     return respond({
@@ -802,7 +858,7 @@ export async function reveal(auth: AuthContext, sessionId: string): Promise<Reve
     }
   }
 
-  const diagnosis = await secretRepo.getDiagnosis(sessionId)
+  const diagnosis = await loadDiagnosis(session)
   const revealed = await buildReveal(session, diagnosis)
 
   await secretRepo.putReveal({ sessionId, kind: 'reveal', ...revealed, createdAt: Date.now() })
