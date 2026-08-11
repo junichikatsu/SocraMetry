@@ -33,6 +33,26 @@ type JwtPayload = AuthContext & { exp: number }
 /** hono の型に認証コンテキストを載せる */
 export type AppEnv = { Variables: { auth: AuthContext } }
 
+/**
+ * Cookie の適用範囲を**トリガーのパス配下に絞る**。
+ *
+ * enebular のクラウド実行環境は 1 ホストを複数インスタンスがパスで分け合う。
+ * `Path=/` のままだと、同じホストの別パスに載っている**他の関数にも
+ * `sm_session` が送信される**。`HttpOnly` は JS からの読み取りを防ぐだけで、
+ * サーバへ送られること自体は止められないため、同居する第三者に JWT が渡る。
+ * `SameSite=Lax` も同一サイト（`enebular.com`）内では効かない。
+ *
+ * トリガーのパスは設定として持たない（ADR-009）ので、**リクエストのパスから導く。**
+ * アプリのルートはすべて `/v1/...` なので、先頭が `v1` でなければ
+ * それがトリガーのパスである。
+ */
+export function cookiePath(c: Context): string {
+  const segments = c.req.path.split('/').filter((segment) => segment !== '')
+  const base = segments[0]
+  if (base === undefined || base === 'v1') return '/'
+  return `/${base}`
+}
+
 export async function issueSessionCookie(c: Context, auth: AuthContext): Promise<void> {
   const secret = jwtSecret()
   // 設定漏れを「保存先に接続できない」等の別の原因に見せない。
@@ -45,10 +65,15 @@ export async function issueSessionCookie(c: Context, auth: AuthContext): Promise
   const exp = Math.floor(Date.now() / 1000) + TTL_SEC
   const token = await sign({ ...auth, exp } satisfies JwtPayload, secret, ALG)
 
+  const path = cookiePath(c)
+  // 以前 `Path=/` で発行した Cookie が残っていると、2 つ送られて
+  // どちらが使われるかが曖昧になる。新しく発行する前に消す
+  if (path !== '/') deleteCookie(c, SESSION_COOKIE, { path: '/' })
+
   setCookie(c, SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: 'Lax',
-    path: '/',
+    path,
     maxAge: TTL_SEC,
     // ローカル開発（http://localhost）では Secure な Cookie がブラウザに保存されない。
     // 実際のスキームを見て決めることで、本番は Secure・ローカルは動く状態を両立させる
@@ -57,7 +82,10 @@ export async function issueSessionCookie(c: Context, auth: AuthContext): Promise
 }
 
 export function clearSessionCookie(c: Context): void {
-  deleteCookie(c, SESSION_COOKIE, { path: '/' })
+  const path = cookiePath(c)
+  deleteCookie(c, SESSION_COOKIE, { path })
+  // 過去に `Path=/` で発行したものも消す（移行期の取りこぼしを防ぐ）
+  if (path !== '/') deleteCookie(c, SESSION_COOKIE, { path: '/' })
 }
 
 /**

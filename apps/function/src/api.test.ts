@@ -131,6 +131,46 @@ describe('認証（FR-31a）', () => {
     expect(cookie).toContain('SameSite=Lax')
   })
 
+  /**
+   * enebular は 1 ホストを複数インスタンスがパスで分け合う。`Path=/` のままだと
+   * 同じホストの別パスに載っている**他の関数にも JWT が送られる**。
+   * HttpOnly は JS からの読み取りを防ぐだけで、送信自体は止められない。
+   */
+  it('Cookie の適用範囲をトリガーのパス配下に絞る', async () => {
+    const res = await app.request('/socrametry/v1/auth/signup', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        email: 'scoped@example.com',
+        password: 'password1234',
+        displayName: 'S',
+        inviteCode: ENV.INVITE_CODE,
+      }),
+    })
+
+    const issued = res.headers.getSetCookie().find((line) => !line.includes('Max-Age=0'))
+    expect(issued).toContain('Path=/socrametry')
+    // 過去に Path=/ で発行したものは同時に消す（2 つ送られて曖昧になるのを防ぐ）
+    expect(res.headers.getSetCookie().some((line) => line.includes('Max-Age=0'))).toBe(true)
+  })
+
+  it('トリガーのパスが無い経路では Path=/ のまま（ローカル・テスト）', async () => {
+    const res = await app.request('/v1/auth/signup', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        email: 'plain@example.com',
+        password: 'password1234',
+        displayName: 'P',
+        inviteCode: ENV.INVITE_CODE,
+      }),
+    })
+
+    const issued = res.headers.getSetCookie().find((line) => !line.includes('Max-Age=0'))
+    expect(issued).toContain('Path=/')
+    expect(issued).not.toContain('Path=/v1')
+  })
+
   it('同じメールアドレスは二重登録できない', async () => {
     await signIn('dup@example.com')
     const res = await call('POST', '/v1/auth/signup', {
