@@ -8,6 +8,7 @@
 
 export * from './masking'
 export * from './leak-guard'
+export * from './question-shape'
 export * from './gate-machine'
 export * from './stage-machine'
 export * from './hint-policy'

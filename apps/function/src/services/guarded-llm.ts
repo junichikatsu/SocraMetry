@@ -1,4 +1,4 @@
-import { checkLeak, checkLeakInParts } from '@socrametry/core'
+import { checkLeak, checkLeakInParts, checkQuestionShape } from '@socrametry/core'
 import {
   FALLBACK_QUESTIONS,
   fallbackHint,
@@ -57,12 +57,21 @@ export async function generateGuardedQuestion(params: {
       calls.push(...result.calls)
 
       const leak = checkLeakInParts(inspectableParts(result.data), guardOptions)
-      if (!leak.leaked) {
+      /**
+       * 漏洩だけでなく**出題として成立するか**も検査する。
+       * 「〜は正しいですか？／はい・いいえ」の形は、
+       * 答えを知らない出題者には正解を決められない（question-shape.ts）。
+       * 再生成の経路は漏洩と共通にする。3 回目は試さない。
+       */
+      const shape = checkQuestionShape(result.data.question, result.data.options)
+
+      if (!leak.leaked && !shape.invalid) {
         return { question: result.data, calls, leakGuardRetries: attempt, fallbackUsed: false }
       }
 
       // 検出イベントは構造化ログに記録する（プロンプト改善のため）
-      logLeak('questioner', params.input.stage, leak.rules, attempt)
+      if (leak.leaked) logLeak('questioner', params.input.stage, leak.rules, attempt)
+      if (shape.invalid) logShape('questioner', params.input.stage, shape.rules, attempt)
       const last = calls[calls.length - 1]
       if (last) last.leakGuardHit = true
     } catch (cause) {
@@ -124,6 +133,12 @@ export async function generateGuardedHint(params: {
 function logLeak(role: string, stage: string | null, rules: string[], attempt: number): void {
   console.log(
     JSON.stringify({ level: 'WARN', event: 'leakguard.hit', role, stage, rules, attempt }),
+  )
+}
+
+function logShape(role: string, stage: string | null, rules: string[], attempt: number): void {
+  console.log(
+    JSON.stringify({ level: 'WARN', event: 'question.invalid_shape', role, stage, rules, attempt }),
   )
 }
 
