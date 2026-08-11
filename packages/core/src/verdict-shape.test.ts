@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { checkVerdictConsistency, REACHED_FALLBACK_FEEDBACK } from './verdict-shape'
+import {
+  checkFeedbackLeak,
+  checkVerdictConsistency,
+  REACHED_FALLBACK_FEEDBACK,
+  SAFE_FEEDBACK,
+} from './verdict-shape'
 import { stripHintLabel } from './hint-text'
 
 describe('checkVerdictConsistency', () => {
@@ -71,5 +76,91 @@ describe('stripHintLabel', () => {
 
   it('前後の空白は落とす', () => {
     expect(stripHintLabel('  Lv1:  先頭を見る  ')).toBe('先頭を見る')
+  })
+})
+
+/**
+ * Judge のプロンプトには `rootCause` が入っている。
+ * 「明かさないでください」という自然文の指示だけでは、
+ * socratic-engine.md §5 が退けた確率的な方式そのものになる。
+ */
+describe('checkFeedbackLeak', () => {
+  const ROOT_CAUSE =
+    'props で渡される items が API 応答前の初回レンダリング時に undefined になっている'
+
+  describe('partial / not_reached — セッションが続くので全ルールを当てる', () => {
+    it('原因を書き写した文面を検出する', () => {
+      const leaked =
+        'props の items が API 応答前の初回レンダリング時に undefined になっているためです。'
+      expect(checkFeedbackLeak('not_reached', leaked, ROOT_CAUSE).leaked).toBe(true)
+    })
+
+    it('断定表現を検出する（L1）', () => {
+      expect(
+        checkFeedbackLeak('partial', '原因は初期化漏れです。', ROOT_CAUSE).rules,
+      ).toContain('L1')
+    })
+
+    it('修正手順を検出する（L3）', () => {
+      expect(
+        checkFeedbackLeak('partial', '初期値を追加してください。', ROOT_CAUSE).rules,
+      ).toContain('L3')
+    })
+
+    it('正しい誘導は通す', () => {
+      const guiding = 'その現象が起きるのはどんなときでしょうか。'
+      expect(checkFeedbackLeak('partial', guiding, ROOT_CAUSE).leaked).toBe(false)
+    })
+  })
+
+  describe('reached — 既に自力で言い当てているので L1 と L4 は当てない', () => {
+    /**
+     * 一律にかけると、**成功体験のたびに定型文へ潰れる。**
+     * 到達した人への文面が診断文と語彙を共有するのは当然である。
+     */
+    it('捉えた内容を言語化した文面を通す（語彙が重なっても）', () => {
+      const praise =
+        'その通りです。API 応答前の初回レンダリングで items が undefined だった、という構造を捉えられています。'
+      const result = checkFeedbackLeak('reached', praise, ROOT_CAUSE)
+      expect(result.leaked).toBe(false)
+    })
+
+    it('同じ文面を not_reached として見れば漏洩になる（判定で扱いが変わることの確認）', () => {
+      const praise =
+        'その通りです。API 応答前の初回レンダリングで items が undefined だった、という構造を捉えられています。'
+      expect(checkFeedbackLeak('not_reached', praise, ROOT_CAUSE).leaked).toBe(true)
+    })
+
+    it('修正手順は reached でも検出する（Gate C の内容の先出しになる）', () => {
+      const result = checkFeedbackLeak(
+        'reached',
+        'その通りです。初期値を追加してください。',
+        ROOT_CAUSE,
+      )
+      expect(result.rules).toContain('L3')
+    })
+
+    it('コードブロックは reached でも検出する', () => {
+      const withCode = 'その通りです。 ```ts items ?? [] ```'
+      const result = checkFeedbackLeak('reached', withCode, ROOT_CAUSE)
+      expect(result.rules).toContain('L2')
+    })
+  })
+
+  describe('SAFE_FEEDBACK', () => {
+    it('差し替え文はどれも検査を通る（差し替えた結果がまた落ちない）', () => {
+      for (const verdict of ['reached', 'partial', 'not_reached'] as const) {
+        const feedback = SAFE_FEEDBACK[verdict]
+        expect(checkFeedbackLeak(verdict, feedback, ROOT_CAUSE).leaked, verdict).toBe(false)
+        expect(checkVerdictConsistency(verdict, feedback).inconsistent, verdict).toBe(false)
+      }
+    })
+
+    it('差し替え文は原因の語彙を含まない', () => {
+      for (const verdict of ['partial', 'not_reached'] as const) {
+        expect(SAFE_FEEDBACK[verdict]).not.toContain('undefined')
+        expect(SAFE_FEEDBACK[verdict]).not.toContain('props')
+      }
+    })
   })
 })

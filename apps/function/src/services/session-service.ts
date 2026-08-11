@@ -14,7 +14,6 @@ import {
   resolveTotalStages,
   revealGateReason,
   stageAt,
-  stripHintLabel,
   ulid,
 } from '@socrametry/core'
 import {
@@ -63,7 +62,12 @@ import {
 import { recordLlmCalls, totalTokens } from '../middleware/cost-log'
 import { errors } from '../middleware/error-handler'
 import { assertSessionRateLimit } from '../middleware/rate-limit'
-import { generateGuardedHint, generateGuardedQuestion, judgeGuarded } from './guarded-llm'
+import {
+  generateGuardedHint,
+  generateGuardedQuestion,
+  guardDiagnosisHints,
+  judgeGuarded,
+} from './guarded-llm'
 import {
   findTurn,
   gateStateOf,
@@ -244,8 +248,9 @@ export async function runDiagnosis(
       distractorThemes: result.data.distractorThemes,
       difficulty: result.data.difficulty,
       // Gate A の Lv1〜3 を診断と同じ 1 回の呼び出しで受け取っている（NFR-C5）
-      // 画面が「Lv2」を別に表示するため、本文のレベル表記は落とす
-      hints: result.data.gateAHints.map(stripHintLabel),
+      // ★ 保存前に LeakGuard を通す。openHint() はここを検査なしで返すため、
+      //   ここで落としておかないと答えがそのまま Gate A で配信される
+      hints: guardDiagnosisHints(result.data.gateAHints, result.data.rootCause),
       modelUsed: result.calls[result.calls.length - 1]?.model ?? 'unknown',
       createdAt: Date.now(),
     }

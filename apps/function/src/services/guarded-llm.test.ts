@@ -1,5 +1,6 @@
 import { checkLeak, checkLeakInParts } from '@socrametry/core'
 import {
+  fallbackHint,
   FALLBACK_HINTS,
   FALLBACK_QUESTIONS,
   MOCK_DIAGNOSIS,
@@ -9,7 +10,7 @@ import {
 } from '@socrametry/llm'
 import { STAGES } from '@socrametry/shared'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { generateGuardedHint, generateGuardedQuestion } from './guarded-llm'
+import { generateGuardedHint, generateGuardedQuestion, guardDiagnosisHints } from './guarded-llm'
 
 /**
  * 固定応答とフォールバックが LeakGuard を通ることを保証する。
@@ -132,5 +133,55 @@ describe('generateGuardedHint', () => {
     const result = await generateGuardedHint({ errorText: 'TypeError', language: 'typescript' })
     expect(result.fallbackUsed).toBe(false)
     expect(result.body).toBe(MOCK_HINT)
+  })
+})
+
+/**
+ * `gateAHints` は `rootCause` を生成したのと同じ呼び出しの出力で、
+ * しかも Diagnoser のプロンプトは冒頭で「原因をはっきり書いてください」と伝えている。
+ * `openHint()` はこれを検査なしで返すため、保存時に落とさないと
+ * **答えがそのまま Gate A で配信される。**
+ */
+describe('guardDiagnosisHints', () => {
+  it('漏れていないヒントはそのまま通す', () => {
+    const result = guardDiagnosisHints(MOCK_DIAGNOSIS.gateAHints, MOCK_DIAGNOSIS.rootCause)
+    expect(result).toEqual(MOCK_DIAGNOSIS.gateAHints)
+  })
+
+  it('原因を書いてしまったヒントだけを定型ヒントに落とす', () => {
+    const hints = [
+      'エラーメッセージの後半に注目してみてください。',
+      // 診断文をほぼそのまま書いてしまった Lv2
+      'props の items が API 応答前の初回レンダリング時に undefined になっています。',
+      '「X of undefined」は X を持っているはずの入れ物が空だったことを意味します。',
+    ]
+    const result = guardDiagnosisHints(hints, MOCK_DIAGNOSIS.rootCause)
+
+    expect(result[0]).toBe(hints[0])
+    expect(result[1]).toBe(fallbackHint(2))
+    expect(result[2]).toBe(hints[2])
+  })
+
+  it('断定表現のヒントも落とす', () => {
+    const result = guardDiagnosisHints(
+      ['原因は初期化漏れです。'],
+      MOCK_DIAGNOSIS.rootCause,
+    )
+    expect(result[0]).toBe(fallbackHint(1))
+  })
+
+  it('レベル表記の除去も同時に行う', () => {
+    const result = guardDiagnosisHints(
+      ['Lv2: スタックトレース最上位の行を見てください。'],
+      MOCK_DIAGNOSIS.rootCause,
+    )
+    expect(result[0]).toBe('スタックトレース最上位の行を見てください。')
+  })
+
+  it('落とした先の定型ヒントは検査を通る（差し替えた結果がまた落ちない）', () => {
+    for (const level of [1, 2, 3]) {
+      const result = guardDiagnosisHints([fallbackHint(level)], MOCK_DIAGNOSIS.rootCause)
+      expect(result[0], `Lv${level}`).toBe(fallbackHint(level))
+    }
   })
 })

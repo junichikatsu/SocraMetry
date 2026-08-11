@@ -1,9 +1,11 @@
 import {
+  checkFeedbackLeak,
   checkLeak,
   checkLeakInParts,
   checkQuestionShape,
   checkVerdictConsistency,
   REACHED_FALLBACK_FEEDBACK,
+  SAFE_FEEDBACK,
   stripHintLabel,
 } from '@socrametry/core'
 import {
@@ -176,29 +178,34 @@ export async function judgeGuarded(input: {
     const first = await judgeConclusion(input)
     calls.push(...first.calls)
 
-    const shape = checkVerdictConsistency(first.data.verdict, first.data.feedback)
-    if (!shape.inconsistent) return { judgement: first.data, calls, repaired: false }
+    let judgement: JudgeOutput = first.data
+    let repaired = false
 
-    logVerdictShape(shape.rules, 0)
+    // ── 1. 判定と文面の整合 ──
+    const shape = checkVerdictConsistency(judgement.verdict, judgement.feedback)
+    if (shape.inconsistent) {
+      logVerdictShape(shape.rules, 0)
+      repaired = true
 
-    // 判定は据え置き、文面だけ書き直させる
-    const retry = await judgeConclusion({
-      ...input,
-      feedbackOnly: { verdict: first.data.verdict, previous: first.data.feedback },
-    })
-    calls.push(...retry.calls)
+      // 判定は据え置き、文面だけ書き直させる
+      const retry = await judgeConclusion({
+        ...input,
+        feedbackOnly: { verdict: judgement.verdict, previous: judgement.feedback },
+      })
+      calls.push(...retry.calls)
 
-    // 判定が変わった場合は 1 回目を正とする（文面の書き直しで判定を動かさない）
-    const judgement: JudgeOutput = { verdict: first.data.verdict, feedback: retry.data.feedback }
-    const second = checkVerdictConsistency(judgement.verdict, judgement.feedback)
-    if (!second.inconsistent) return { judgement, calls, repaired: true }
+      // 判定が変わっても 1 回目を正とする（文面の書き直しで判定を動かさない）
+      judgement = { verdict: first.data.verdict, feedback: retry.data.feedback }
 
-    logVerdictShape(second.rules, 1)
-    return {
-      judgement: { verdict: first.data.verdict, feedback: REACHED_FALLBACK_FEEDBACK },
-      calls,
-      repaired: true,
+      const second = checkVerdictConsistency(judgement.verdict, judgement.feedback)
+      if (second.inconsistent) {
+        logVerdictShape(second.rules, 1)
+        judgement = { verdict: first.data.verdict, feedback: REACHED_FALLBACK_FEEDBACK }
+      }
     }
+
+    // ── 2. 漏洩検査 ──
+    return { judgement: guardFeedback(judgement, input.rootCause, calls, repaired), calls, repaired }
   } catch (cause) {
     if (!(cause instanceof LlmError)) throw cause
     calls.push(...cause.calls)
@@ -206,6 +213,61 @@ export async function judgeGuarded(input: {
     // 失敗時に reached へ倒さない。評価が甘くなる方向のフォールバックは作らない
     return { judgement: { ...FALLBACK_JUDGE }, calls, repaired: false }
   }
+}
+
+/**
+ * フィードバックに答えが混じっていないかを検査する（FR-08）。
+ *
+ * **Judge のプロンプトには `rootCause` が入っている。**「明かさないでください」という
+ * 自然文の指示だけが防御では、socratic-engine.md §5 が退けた確率的な方式そのものになる。
+ * 特に `partial` / `not_reached` はセッションが続くため、ここで原因が出ると
+ * **そのまま宣言し直して最上位評価を取れてしまう。**
+ *
+ * **再生成はしない。** 設問と違ってフィードバックは情報量が小さく、
+ * 定型文に落としても体験の損失が限定的である一方、
+ * 作り直せばもう一度漏れる可能性を引き受けることになる。
+ * **判定は変えない。** 評価に使う値が文面の都合で動いてはならない。
+ */
+function guardFeedback(
+  judgement: JudgeOutput,
+  rootCause: string,
+  calls: LlmCallMeta[],
+  alreadyRepaired: boolean,
+): JudgeOutput {
+  const leak = checkFeedbackLeak(judgement.verdict, judgement.feedback, rootCause)
+  if (!leak.leaked) return judgement
+
+  logLeak('judge', null, leak.rules, alreadyRepaired ? 1 : 0)
+  const last = calls[calls.length - 1]
+  if (last) last.leakGuardHit = true
+
+  return { verdict: judgement.verdict, feedback: SAFE_FEEDBACK[judgement.verdict] }
+}
+
+/**
+ * Gate A の Lv2 / Lv3 ヒントを検査する（FR-08 / NFR-S3）。
+ *
+ * `gateAHints` は **`rootCause` を生成したのと同じ呼び出しの出力**であり、
+ * しかも Diagnoser のプロンプトは冒頭で「この出力はユーザーには表示されません。
+ * 遠慮せず原因をはっきり書いてください」と伝えている。
+ * 「gateAHints だけは原因を述べない」という但し書きは、その枠組みと戦っている。
+ *
+ * **保存時に検査する。** `openHint()` は意図的に LLM を呼ばない同期パスであり、
+ * ここは `rootCause` を手元に持っていてレイテンシにも余裕がある。
+ * 漏れているレベルだけ定型ヒントに落とす。
+ *
+ * `stage` は渡さない。Gate A のヒントは段階に紐づかず、
+ * `stage: 'fix'` の分岐は L2 / L3 / L5 を無効化してしまうため。
+ */
+export function guardDiagnosisHints(hints: readonly string[], rootCause: string): string[] {
+  return hints.map((raw, index) => {
+    const hint = stripHintLabel(raw)
+    const leak = checkLeak(hint, { rootCause })
+    if (!leak.leaked) return hint
+
+    logLeak('diagnoser', null, leak.rules, index)
+    return fallbackHint(index + 1)
+  })
 }
 
 function logVerdictShape(rules: string[], attempt: number): void {
