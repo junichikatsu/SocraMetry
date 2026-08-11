@@ -1,10 +1,20 @@
-import { checkLeak, checkLeakInParts, checkQuestionShape } from '@socrametry/core'
 import {
+  checkLeak,
+  checkLeakInParts,
+  checkQuestionShape,
+  checkVerdictConsistency,
+  REACHED_FALLBACK_FEEDBACK,
+  stripHintLabel,
+} from '@socrametry/core'
+import {
+  FALLBACK_JUDGE,
   FALLBACK_QUESTIONS,
   fallbackHint,
   generateHint,
   generateQuestion,
+  judgeConclusion,
   LlmError,
+  type JudgeOutput,
   type LlmCallMeta,
   type QuestionerInput,
   type QuestionerOutput,
@@ -118,8 +128,10 @@ export async function generateGuardedHint(params: {
     const result = await generateHint(params)
     calls.push(...result.calls)
 
-    const leak = checkLeak(result.data.hint)
-    if (!leak.leaked) return { body: result.data.hint, calls, fallbackUsed: false }
+    // 画面が「Lv2」を別に表示するため、本文のレベル表記は落とす
+    const hint = stripHintLabel(result.data.hint)
+    const leak = checkLeak(hint)
+    if (!leak.leaked) return { body: hint, calls, fallbackUsed: false }
 
     logLeak('hinter', null, leak.rules, 0)
     const last = calls[calls.length - 1]
@@ -133,6 +145,73 @@ export async function generateGuardedHint(params: {
   // ヒントは再生成しない。1 文しかないため、失敗したら定型に落とす方が速く確実
   logFallback('hinter', null)
   return { body: fallbackHint(1), calls, fallbackUsed: true }
+}
+
+export type GuardedJudge = {
+  judgement: JudgeOutput
+  calls: LlmCallMeta[]
+  /** 文面を差し替えたか。運用ログで頻度を追う */
+  repaired: boolean
+}
+
+/**
+ * 到達判定（FR-09）。**判定と文面の整合を検査する。**
+ *
+ * `reached` なのに「まだ足りない」と読める文面が返ることが実測で確認された。
+ * デモの山場（自力で到達する場面）を壊すため、決定的なルールで検査し、
+ * 1 回だけ書き直させる。それでも直らなければ**判定は変えずに文面だけ**差し替える。
+ *
+ * **判定そのものは書き直させない。** 評価に使う値なので、
+ * 文面の都合で判定が動くようなことがあってはならない。
+ */
+export async function judgeGuarded(input: {
+  conclusion: string
+  rootCause: string
+  evidence: string[]
+  errorText: string
+}): Promise<GuardedJudge> {
+  const calls: LlmCallMeta[] = []
+
+  try {
+    const first = await judgeConclusion(input)
+    calls.push(...first.calls)
+
+    const shape = checkVerdictConsistency(first.data.verdict, first.data.feedback)
+    if (!shape.inconsistent) return { judgement: first.data, calls, repaired: false }
+
+    logVerdictShape(shape.rules, 0)
+
+    // 判定は据え置き、文面だけ書き直させる
+    const retry = await judgeConclusion({
+      ...input,
+      feedbackOnly: { verdict: first.data.verdict, previous: first.data.feedback },
+    })
+    calls.push(...retry.calls)
+
+    // 判定が変わった場合は 1 回目を正とする（文面の書き直しで判定を動かさない）
+    const judgement: JudgeOutput = { verdict: first.data.verdict, feedback: retry.data.feedback }
+    const second = checkVerdictConsistency(judgement.verdict, judgement.feedback)
+    if (!second.inconsistent) return { judgement, calls, repaired: true }
+
+    logVerdictShape(second.rules, 1)
+    return {
+      judgement: { verdict: first.data.verdict, feedback: REACHED_FALLBACK_FEEDBACK },
+      calls,
+      repaired: true,
+    }
+  } catch (cause) {
+    if (!(cause instanceof LlmError)) throw cause
+    calls.push(...cause.calls)
+    logGenerationFailure('judge', cause)
+    // 失敗時に reached へ倒さない。評価が甘くなる方向のフォールバックは作らない
+    return { judgement: { ...FALLBACK_JUDGE }, calls, repaired: false }
+  }
+}
+
+function logVerdictShape(rules: string[], attempt: number): void {
+  console.log(
+    JSON.stringify({ level: 'WARN', event: 'verdict.inconsistent', rules, attempt }),
+  )
 }
 
 function logLeak(role: string, stage: string | null, rules: string[], attempt: number): void {

@@ -97,11 +97,17 @@ export function judgeConclusion(input: {
   rootCause: string
   evidence: string[]
   errorText: string
+  /** 判定を据え置いて文面だけ書き直させる場合に渡す */
+  feedbackOnly?: { verdict: string; previous: string } | null
 }): Promise<LlmResult<JudgeOutput>> {
   if (isMockMode()) {
     return Promise.resolve({ data: mockJudge(input.conclusion), calls: [mockMeta('judge')] })
   }
-  return callJson({ role: 'judge', ...judgePrompt(input), schema: judgeOutputSchema })
+  return callJson({
+    role: 'judge',
+    ...judgePrompt({ ...input, feedbackOnly: input.feedbackOnly ?? null }),
+    schema: judgeOutputSchema,
+  })
 }
 
 // ── Revealer（高品質・Gate C）───────────────────────────────────────────────

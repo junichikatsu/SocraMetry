@@ -88,13 +88,14 @@ export function diagnoserPrompt(input: {
   "focusHints": [{"stage": "observe|localize|hypothesize|verify|fix", "lookAt": "その段階で見るべき場所"}],
   "distractorThemes": ["この文脈でありえた誤解", ...最大 6 件],
   "difficulty": "easy|medium|hard",
-  "gateAHints": ["Lv1: 着目範囲を狭めるヒント", "Lv2: 見るべき対象を具体化するヒント", "Lv3: 考え方の枠組みを与えるヒント"]
+  "gateAHints": ["着目範囲を狭めるヒント", "見るべき対象を具体化するヒント", "考え方の枠組みを与えるヒント"]
 }
 
 重要な制約:
 - focusHints は 5 段階すべてについて、その段階で「どこを見るべきか」だけを書く。答えは書かない
 - distractorThemes は誤答選択肢の素材。**もっともらしい誤解**を挙げる。明らかに馬鹿げたものを入れない
-- gateAHints の 3 つは、いずれも**原因そのものを述べない**。Lv3 は一般化された知識（例:「X of undefined は X の持ち主が空だったことを意味する」）にとどめ、今回のケースへの当てはめはユーザーに残す
+- gateAHints は**配列の順に Lv1 → Lv2 → Lv3** として扱われる。**本文に「Lv2:」のようなレベル表記を含めない**（画面が別に表示する）
+- gateAHints の 3 つは、いずれも**原因そのものを述べない**。3 つ目は一般化された知識（例:「X of undefined は X の持ち主が空だったことを意味する」）にとどめ、今回のケースへの当てはめはユーザーに残す
 - difficulty は、この問題を中堅エンジニアが自力で解けるかで判断する`,
     user: contextBlock(input),
   }
@@ -223,7 +224,25 @@ export function judgePrompt(input: {
   rootCause: string
   evidence: string[]
   errorText: string
+  /**
+   * 判定は据え置いて**文面だけ**書き直させるときに渡す。
+   * 判定が文面の都合で動くことがないよう、判定は入力として固定して伝える。
+   */
+  feedbackOnly?: { verdict: string; previous: string } | null
 }): PromptPair {
+  const rewrite = input.feedbackOnly
+    ? `
+
+【文面の書き直し】判定は「${input.feedbackOnly.verdict}」で確定しています。**判定は変えないでください。**
+前回の文面は判定と食い違っていました:
+「${input.feedbackOnly.previous}」
+${
+  input.feedbackOnly.verdict === 'reached'
+    ? '到達している人への文面です。**何を捉えられたのかだけを言い切ってください。**「まだ」「より深く」「探る必要がある」といった促しを入れてはいけません。問いかけで終わらせないでください。'
+    : 'もう一度見るべき場所を示す問いにしてください。原因は明かさないでください。'
+}`
+    : ''
+
   return {
     system: `${COMMON_PERSONA}
 
@@ -238,9 +257,17 @@ export function judgePrompt(input: {
 
 出力する JSON: {"verdict": "reached|partial|not_reached", "feedback": "1〜2 文"}
 
-**重要**: partial / not_reached のフィードバックでも、原因を明かしてはいけません。
-「なぜそうなったのでしょう？」のように 1 段深く考えさせる一言にとどめてください。
-reached の場合は、何を捉えられたのかを言語化して返してください。`,
+**feedback は verdict ごとに書き分けてください。混ぜないでください。**
+
+- reached  … **何を捉えられたのかを言語化して称える。それだけ。**
+             「まだ」「より深く」「探る必要がある」などの促しを入れない。問いかけで終わらせない
+- partial  … どこで止まっているかを示し、1 段深く考えさせる問い。原因は書かない
+- not_reached … もう一度見るべき場所を示す問い。原因は書かない
+
+**reached は到達した人への文面です。** ここに促しを混ぜると、
+当たったのに「まだ足りない」と言われたことになります。**言い切ってください。**
+
+**重要**: partial / not_reached でも、原因を明かしてはいけません。${rewrite}`,
     user: [
       `## ユーザーの宣言\n${input.conclusion}`,
       `## 実際の原因（判定用。ユーザーには見せない）\n${input.rootCause}`,

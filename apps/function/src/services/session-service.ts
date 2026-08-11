@@ -14,6 +14,7 @@ import {
   resolveTotalStages,
   revealGateReason,
   stageAt,
+  stripHintLabel,
   ulid,
 } from '@socrametry/core'
 import {
@@ -30,11 +31,9 @@ import {
 } from '@socrametry/datastore'
 import {
   diagnose,
-  FALLBACK_JUDGE,
   FALLBACK_REVEAL,
   fallbackHint,
   generateReveal,
-  judgeConclusion,
   LlmError,
   RETROSPECTION_QUESTION,
   type LlmCallMeta,
@@ -64,7 +63,7 @@ import {
 import { recordLlmCalls, totalTokens } from '../middleware/cost-log'
 import { errors } from '../middleware/error-handler'
 import { assertSessionRateLimit } from '../middleware/rate-limit'
-import { generateGuardedHint, generateGuardedQuestion } from './guarded-llm'
+import { generateGuardedHint, generateGuardedQuestion, judgeGuarded } from './guarded-llm'
 import {
   findTurn,
   gateStateOf,
@@ -245,7 +244,8 @@ export async function runDiagnosis(
       distractorThemes: result.data.distractorThemes,
       difficulty: result.data.difficulty,
       // Gate A の Lv1〜3 を診断と同じ 1 回の呼び出しで受け取っている（NFR-C5）
-      hints: result.data.gateAHints,
+      // 画面が「Lv2」を別に表示するため、本文のレベル表記は落とす
+      hints: result.data.gateAHints.map(stripHintLabel),
       modelUsed: result.calls[result.calls.length - 1]?.model ?? 'unknown',
       createdAt: Date.now(),
     }
@@ -762,26 +762,16 @@ export async function declareConclusion(
 
   assertTokenBudget(session)
 
-  let verdict: ConclusionResultPublic['verdict']
-  let feedback: string
-  try {
-    const judged = await judgeConclusion({
-      conclusion: precheck.body,
-      rootCause: diagnosis.rootCause,
-      evidence: diagnosis.evidence,
-      errorText: session.errorText,
-    })
-    await applyCalls(session, judged.calls)
-    verdict = judged.data.verdict
-    feedback = judged.data.feedback
-  } catch (cause) {
-    if (!(cause instanceof LlmError)) throw cause
-    // 失敗時に reached へ倒さない。評価が甘くなる方向のフォールバックは作らない
-    await applyCalls(session, cause.calls)
-    logLlmFailure('judge', sessionId, cause)
-    verdict = FALLBACK_JUDGE.verdict
-    feedback = FALLBACK_JUDGE.feedback
-  }
+  // 判定と文面の整合まで検査する（reached なのに「まだ足りない」と読める文面を出さない）
+  const judged = await judgeGuarded({
+    conclusion: precheck.body,
+    rootCause: diagnosis.rootCause,
+    evidence: diagnosis.evidence,
+    errorText: session.errorText,
+  })
+  await applyCalls(session, judged.calls)
+  const verdict = judged.judgement.verdict
+  const feedback = judged.judgement.feedback
 
   session.conclusions.push({ bodyHash: hash, verdict, feedback, at: Date.now() })
 
