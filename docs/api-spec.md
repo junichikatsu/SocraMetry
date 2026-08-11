@@ -224,7 +224,9 @@ Set-Cookie: sm_session=<jwt>; HttpOnly; Secure; SameSite=None; Max-Age=86400; Pa
   "limits": {                    // 実際に効いている設定値。環境変数と既定値のどちらが効いているか外から分かる
     "stages": 5,                 //   Gate B の段階数（DEMO_MAX_STAGES）
     "diagnoser": 1600,           //   役割別の max_tokens
-    "hinter": 300, "questioner": 900, "judge": 500, "revealer": 1000, "reporter": 1000
+    "hinter": 300, "questioner": 900, "judge": 500, "revealer": 1000, "reporter": 1000,
+    "usdJpyRate": 165,           //   円換算レート（USD_JPY_RATE）
+    "opsLog": true               //   ops_logs への記録が有効か（OPS_LOG_ENABLED）
   }
 }
 ```
@@ -232,6 +234,12 @@ Set-Cookie: sm_session=<jwt>; HttpOnly; Secure; SameSite=None; Max-Age=86400; Pa
 > **`limits` を返すのは、設定の食い違いを LLM を呼ばずに確認するため。**
 > 環境変数を消したのに古い値が効いたままの状態を切り分けられず、
 > 実際に LLM 呼び出しを 2 回無駄にした。値は上限であって秘匿情報ではない。
+>
+> **`usdJpyRate` と `opsLog` はコスト計測のために後から追加した。**
+> 前者は実行環境 165 / コード既定 150 でずれ、設計書の円が
+> 150 換算と 165 換算で混在した。後者は無効だと**課金されるのに記録が残らず**、
+> `GET /cost` が MOCK と同じ「呼び出し 0 件」を返して見分けがつかない。
+> **いずれも「設定が効いているか外から見えない」ことで実害が出た項目である。**
 
 > **すべてのレイテンシは実行環境のタイムアウト設定内に収める必要がある。**
 > タイムアウトは `enebular bulk-update cloud-config` の `timeout` で設定する。

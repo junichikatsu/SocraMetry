@@ -51,6 +51,32 @@ describe('GET /v1/health の出力上限', () => {
     expect(body.limits.diagnoser).toBe(800)
     delete process.env['MAX_TOKENS_DIAGNOSER']
   })
+
+  /**
+   * コスト計測に効く 2 つの設定。**どちらも欠けると計測が静かに壊れる。**
+   *
+   * - `usdJpyRate`: 実行環境 165 / コード既定 150 でずれ、設計書の円が
+   *   150 換算と 165 換算で混在した
+   * - `opsLog`: false だと課金されるのに記録が残らず、`GET /cost` は
+   *   MOCK と同じ「呼び出し 0 件」を返して見分けがつかない
+   *
+   * 出すのをやめると同じ事故が再発するため、テストで固定する。
+   */
+  it('円換算レートと ops_logs の有効／無効を返す', async () => {
+    const res = await app.request('/v1/health')
+    const body = (await res.json()) as {
+      limits: { usdJpyRate: number; opsLog: boolean }
+    }
+
+    expect(body.limits.usdJpyRate).toBe(165)
+    expect(typeof body.limits.opsLog).toBe('boolean')
+
+    process.env['USD_JPY_RATE'] = '150'
+    const overridden = await app.request('/v1/health')
+    const overriddenBody = (await overridden.json()) as { limits: { usdJpyRate: number } }
+    expect(overriddenBody.limits.usdJpyRate).toBe(150)
+    delete process.env['USD_JPY_RATE']
+  })
 })
 
 describe('GET /v1/health の設定チェック', () => {

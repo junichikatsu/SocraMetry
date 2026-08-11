@@ -312,7 +312,7 @@ ZIP は決定的にビルドされるため、同じコミットからは同じ 
 | 6 | `envVars` に必要なテーブル ID と鍵が設定されているか | 自動 |
 | 7 | `SESSION_JWT_SECRET` と `INVITE_CODE` が既定値（`change-me`）のままでないか | 自動 |
 | 8 | `connectDataStore` が有効か | 手動 |
-| 9 | `OPS_LOG_ENABLED` が `true` か（v0.1 はコスト実測のため有効にする / F11） | 手動 |
+| 9 | `OPS_LOG_ENABLED` が `true` か（v0.1 はコスト実測のため有効にする / F11）<br>→ **`GET /v1/health` の `limits.opsLog` で確認できる。**false だと課金されるのに記録が残らず、`GET /cost` が MOCK と見分けられなくなる | 手動 |
 | 10 | **`MOCK_MODE` が意図した値になっているか**（本番で `true` のまま公開しない） | 手動 |
 | 11 | HTTP トリガーのパスが enebular インスタンス内で一意か | 手動 |
 | 12 | `timeout` が API 仕様の想定レイテンシ（最大 20 秒）より長いか | 手動 |
