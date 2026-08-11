@@ -2,9 +2,9 @@
 
 | 項目 | 内容 |
 |---|---|
-| ドキュメント版数 | v0.4 |
-| 更新日 | 2026-08-11 |
-| 主な変更 | **v0.1 の実装に合わせて追記。** §2.1a に簡易認証の 3 本、問答系に `GET /cost`、`/v1/health` の応答を明記 |
+| ドキュメント版数 | v0.5 |
+| 更新日 | 2026-08-12 |
+| 主な変更 | **実装との差分を解消。** §2.1a に簡易認証の 3 本、問答系に `GET /cost`、`/v1/health` の応答（`limits`）、原因宣言の `verdict: null`、スコア 5 軸の `null`（出題対象外）を明記 |
 | ホスト | enebular クラウド実行環境の HTTP トリガー URL |
 
 > ⚠️ **v0.1 の実装対象は §2.1（問答）と §2.2（個人）のみ。**
@@ -100,8 +100,15 @@ Set-Cookie: sm_session=<jwt>; HttpOnly; Secure; SameSite=None; Max-Age=86400; Pa
 | 429 | `TOKEN_BUDGET_EXCEEDED` | セッションのトークン上限超過（NFR-C1） |
 | 503 | `LLM_UNAVAILABLE` | OrcaRouter への接続失敗（フォールバックも失敗） |
 | 503 | `DATASTORE_UNAVAILABLE` | enebular データストアへのアクセス失敗 |
+| 500 | `INTERNAL_ERROR` | 想定外の例外。**`detail` は返さない**（内部情報の露出を避けるため） |
 
 `202 Accepted` は**エラーではなく待機**を意味する（→ §3.5）。
+
+> **`detail` に利用者の入力を含めない。** 貼り付けたエラーテキストには
+> 秘匿情報が含まれる前提であり（security.md §3）、エラー応答に混ぜると
+> マスキングを迂回することになる。`DATASTORE_UNAVAILABLE` の `detail` は
+> 失敗した操作名（例: `sessions.putItem`）までとし、
+> データストアが返した生のメッセージは**ログにも応答にも出さない**。
 
 ### ★ Gate C 到達前のレスポンスに絶対に含めないフィールド
 
@@ -474,7 +481,7 @@ Lv2 以降の質問は `focusHints` を必要とするため、診断が終わ�
 
 ```jsonc
 {
-  "verdict": "reached",            // reached | partial | not_reached
+  "verdict": "reached",            // reached | partial | not_reached | null
   "feedback": "その通りです。データが到着する前の状態を見落としていた、という構造ですね。",
   "session": { "status": "completed", "reachedGate": "A" },
   "reportPath": "/v1/sessions/01J8XK4M2N0000000000000001/report"
@@ -483,6 +490,25 @@ Lv2 以降の質問は `focusHints` を必要とするため、診断が終わ�
 
 `partial` / `not_reached` の場合は `session.status` は `active` のままで、
 Gate A なら次のヒント、Gate B なら該当段階の設問に戻る。**このとき原因は明かさない。**
+
+#### `verdict: null` — 判定を行わない経路（Q-15）
+
+「わかりません」や短すぎる入力は、**3 値判定そのものを回避する。**
+
+```jsonc
+{
+  "verdict": null,
+  "skipped": true,                 // 判定を行わなかった場合のみ true
+  "feedback": "ここまでで分かったことだけでも大丈夫です。設問に戻って絞り込むか、解説を読むかを選べます。"
+}
+```
+
+**`not_reached` にしてはいけない。** 「分からない」と表明した利用者を設問へ戻すのは、
+socratic-engine.md §4.3 の「詰まった人を助ける」目的と逆になる。
+判定に LLM を使わないため**課金も発生しない**。
+
+判定するかどうかは決定的に決める（`packages/core/src/conclusion-input.ts`）。
+対象は「わかりません」等の定型表現と、正規化後 10 文字未満の入力。
 
 ---
 
@@ -535,6 +561,19 @@ Gate A なら次のヒント、Gate B なら該当段階の設問に戻る。**�
 **同時に `member_stats` を更新する**（[data-model.md §3.5](data-model.md#35-member_stats--事前計算した集計-d4-の要)）。
 2 回目以降はデータストアから読むだけ（LLM を呼ばない）。
 
+> #### 5 軸が `null` になる経路 — 「出題対象外」
+>
+> `DEMO_MAX_STAGES` を 3 に絞った運用では、**出題しなかった 2 段階の軸が `null`** になる
+> （`scoreExplanation.breakdown[].result` も `null`）。
+>
+> **0 点として集計してはならない。** 実測で、**全問正解なのに総合 49 点**という
+> 説明できない数値が出た。出題対象外の軸は重みを 0 にし、
+> **出題した軸だけで重みを正規化して総合点を出す**（→ 75 点）。
+>
+> Gate A で自力解決した場合も、設問を 1 問も解いていないため
+> **5 軸がすべて同じ値**になる（[evaluation-model.md](evaluation-model.md) §4.6）。
+> 画面はこれを「軸ごとの強み弱み」として見せてはならない。
+
 ```jsonc
 {
   "mode": "live",
@@ -555,6 +594,7 @@ Gate A なら次のヒント、Gate B なら該当段階の設問に戻る。**�
   ],
   "revealedAnswer": "props の items が API 応答前の初回レンダリングで undefined だったため。",
   "score": {
+    // ★ 各軸は number | null。null は「出題対象外」（上記）
     "observe": 100, "localize": 60, "hypothesize": 85, "verify": 85, "fix": 85,
     "total": 81,
     "gateFactor": 0.90,
