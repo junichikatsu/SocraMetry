@@ -109,6 +109,20 @@ for (const s of sessions) {
     log(`  ${s.id}: 取得できず (${res.status})`)
     continue
   }
+  /**
+   * ★ `enabled: false`（`OPS_LOG_ENABLED` が無効）と「MOCK だけのセッション」は
+   * どちらも呼び出し 0 件に見えるが、意味が正反対である。
+   * 前者は**課金されているのに記録が無い**状態で、黙って 0 円と報告すると
+   * 「コストがかかっていない」と誤読させる。集計を続けずに止める。
+   */
+  if (res.data.enabled === false) {
+    console.error('\n✖ ops_logs が無効です（OPS_LOG_ENABLED）。集計できません。')
+    console.error(`  ${res.data.note ?? ''}`)
+    console.error('  実行環境で OPS_LOG_ENABLED=true にしてから計測し直してください。')
+    console.error('  有効かどうかは GET /v1/health の limits.opsLog で確認できます。')
+    process.exit(2)
+  }
+
   const calls = res.data.calls ?? []
   if (calls.length === 0) {
     mockOnly += 1

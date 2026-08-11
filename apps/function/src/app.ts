@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { checkConfig, demoMaxStages } from './config'
+import { checkConfig, demoMaxStages, opsLogEnabled } from './config'
 import { resolveTotalStages } from '@socrametry/core'
 import { maxTokensFor, usdJpyRate } from '@socrametry/llm'
 import { requireAuth, type AppEnv } from './middleware/auth'
@@ -78,6 +78,18 @@ function createRoutes() {
          * 為替レートは秘匿情報ではない。
          */
         usdJpyRate: usdJpyRate(),
+        /**
+         * `ops_logs` への記録が有効か（`OPS_LOG_ENABLED`）。
+         *
+         * **無効だと、課金されているのにコストの記録が残らない。**
+         * しかも `GET /cost` は「呼び出し 0 件」を返すため、
+         * MOCK モードのセッションと見分けがつかない。
+         * 実際にこれで 4 セッション分の計測を取り逃した。
+         *
+         * v0.1 は実測コスト表（F11）のため**有効が既定**である
+         * （data-model.md §7）。
+         */
+        opsLog: opsLogEnabled(),
       },
     })
   })
