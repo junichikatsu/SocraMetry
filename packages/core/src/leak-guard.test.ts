@@ -30,6 +30,32 @@ describe('checkLeak — 検出すべきもの', () => {
     expect(checkLeak(generated, { rootCause: ROOT_CAUSE }).rules).toContain('L4')
   })
 
+  /**
+   * 語彙一致の 2 条件はどちらも 3 語を前提にしていたため、
+   * **簡潔な診断文でこそ L4 が評価されない**状態になっていた。
+   * フォールバックモデルや退避時に短い診断文が返る可能性がある。
+   */
+  describe('L4: 特徴語が 2 個以下の診断文', () => {
+    it('特徴語 1 個の診断文をそのまま書いたら検出する', () => {
+      expect(checkLeak('初期化漏れが起きています', { rootCause: '初期化漏れ' }).rules).toContain(
+        'L4',
+      )
+    })
+
+    it('特徴語 2 個がどちらも出ていれば検出する', () => {
+      const rootCause = 'items が undefined'
+      expect(checkLeak('items が undefined でした', { rootCause }).rules).toContain('L4')
+    })
+
+    it('一部しか出ていなければ通す（過検出しない）', () => {
+      const rootCause = 'items が undefined'
+      expect(checkLeak('items の中身を確かめましたか', { rootCause }).rules).not.toContain('L4')
+      expect(checkLeak('初期化の順序を見てください', { rootCause: '初期化漏れ' }).rules).not.toContain(
+        'L4',
+      )
+    })
+  })
+
   it('L5: Lv1〜4 に修正手法が出ていることを検出する', () => {
     expect(checkLeak('オプショナルチェーンを使う方法', { stage: 'verify' }).rules).toContain('L5')
     expect(checkLeak('null チェックの位置', { stage: 'localize' }).rules).toContain('L5')

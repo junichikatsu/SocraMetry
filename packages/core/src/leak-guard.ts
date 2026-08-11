@@ -155,13 +155,22 @@ export function significantTerms(text: string): string[] {
  *
  * | 条件 | 判定 |
  * |---|---|
+ * | 特徴語が 2 個以下で、**そのすべてが一致** | 漏洩 |
  * | 特徴語が 3 個以上、かつ半分以上が一致 | 漏洩 |
- * | 診断文中で**連続する 3 語**がすべて出現 | 漏洩（短い診断文を拾う） |
+ * | 診断文中で**連続する 3 語**がすべて出現 | 漏洩 |
+ *
+ * **特徴語が 2 個以下の場合を別扱いにしている。**
+ * 下の 2 条件はどちらも 3 語を前提にしており（`present.length >= 3` は成立せず、
+ * 3 語窓のループは `i + 2 < terms.length` で 1 回も回らない）、
+ * 「初期化漏れ」のような簡潔な診断文でこそ検査が効かなくなっていた。
+ * 語数が少ないほど 1 語の情報量は大きいので、全語一致を漏洩と見なす。
  */
 function matchesRootCauseVocabulary(text: string, rootCause: string): boolean {
   const haystack = text.toLowerCase()
   const terms = significantTerms(rootCause)
   if (terms.length === 0) return false
+
+  if (terms.length <= 2) return terms.every((t) => haystack.includes(t))
 
   const present = terms.filter((t) => haystack.includes(t))
   if (present.length >= 3 && present.length / terms.length >= 0.5) return true

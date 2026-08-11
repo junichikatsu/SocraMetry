@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { checkConfig, demoMaxStages } from './config'
 import { resolveTotalStages } from '@socrametry/core'
-import { maxTokensFor } from '@socrametry/llm'
+import { maxTokensFor, usdJpyRate } from '@socrametry/llm'
 import { requireAuth, type AppEnv } from './middleware/auth'
 import { toErrorResponse } from './middleware/error-handler'
 import { authRoutes } from './routes/auth'
@@ -69,6 +69,15 @@ function createRoutes() {
         judge: maxTokensFor('judge'),
         revealer: maxTokensFor('revealer'),
         reporter: maxTokensFor('reporter'),
+        /**
+         * 円換算に使っているレート（`USD_JPY_RATE`）。
+         *
+         * **コストログの円が何を基準にしているかは、外から見えないと分からない。**
+         * 実際に、実行環境が 165 なのに設計書とコードの既定が 150 のまま
+         * 混在し、レビューで指摘されるまで気づかなかった。
+         * 為替レートは秘匿情報ではない。
+         */
+        usdJpyRate: usdJpyRate(),
       },
     })
   })

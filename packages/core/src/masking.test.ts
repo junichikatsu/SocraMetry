@@ -89,3 +89,43 @@ describe('parseMaskWords', () => {
     expect(parseMaskWords(undefined)).toEqual([])
   })
 })
+
+/**
+ * 除外語は部分一致で置換していたため、短いラテン文字の語を登録すると
+ * 無関係な箇所まで壊れていた。マスクとしては安全側だが、
+ * **スタックトレースが壊れた状態で LLM に渡り、診断精度が落ちる。**
+ */
+describe('除外語の照合範囲', () => {
+  it('ラテン文字の語は単語として一致したときだけ置換する', () => {
+    const text = 'at trace() in interface Ace of replace.ts'
+    const masked = maskText(text, { maskWords: ['Ace'] })
+
+    expect(masked).toContain('trace()')
+    expect(masked).toContain('interface')
+    expect(masked).toContain('replace.ts')
+    expect(masked).toContain('[REDACTED_NAME]')
+  })
+
+  it('記号で区切られていれば境界とみなす（パス・識別子の中でも消す）', () => {
+    expect(maskText('/work/acme-corp/billing.ts', { maskWords: ['acme-corp'] })).toBe(
+      '/work/[REDACTED_NAME]/billing.ts',
+    )
+    expect(maskText('AcmeClient を初期化', { maskWords: ['Acme'] })).toBe('AcmeClient を初期化')
+  })
+
+  it('大文字小文字は区別しない', () => {
+    expect(maskText('ACME と acme', { maskWords: ['Acme'] })).toBe(
+      '[REDACTED_NAME] と [REDACTED_NAME]',
+    )
+  })
+
+  /** 日本語は前後に単語境界が立たないため、部分一致のままにする */
+  it('日本語の語は語中でも置換する', () => {
+    expect(maskText('株式会社アクメの担当者', { maskWords: ['株式会社アクメ'] })).toBe(
+      '[REDACTED_NAME]の担当者',
+    )
+    expect(maskText('アクメ商事との取引', { maskWords: ['アクメ'] })).toBe(
+      '[REDACTED_NAME]商事との取引',
+    )
+  })
+})

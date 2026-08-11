@@ -29,6 +29,28 @@ export type MaskResult = {
 }
 
 /** 正規表現の特殊文字を無効化する（除外語をリテラルとして扱うため） */
+/** ラテン文字・数字・ハイフン・アンダースコアだけで構成されているか */
+const LATIN_WORD = /^[A-Za-z0-9_-]+$/
+
+/**
+ * 除外語の照合パターン。
+ *
+ * **ラテン文字の語には単語境界を付ける。** 部分一致のままだと、
+ * 短い社名を登録した瞬間に無関係な箇所まで壊れる
+ * （例: `Ace` → `trace` / `interface` / `replace`）。
+ * マスクとしては安全側だが、**スタックトレースが壊れた状態で LLM に渡り、
+ * 診断精度が落ちる**（security.md §3 の「業務データを守る」目的から外れる）。
+ *
+ * **日本語の語は部分一致のまま。** 「株式会社アクメ」のような語は前後に
+ * 単語境界が立たず、`\b` を付けると一致しなくなる。
+ */
+function maskWordPattern(word: string): RegExp {
+  const escaped = escapeRegExp(word)
+  return LATIN_WORD.test(word)
+    ? new RegExp(`\\b${escaped}\\b`, 'gi')
+    : new RegExp(escaped, 'gi')
+}
+
 function escapeRegExp(literal: string): string {
   return literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
@@ -130,7 +152,7 @@ export function maskDetail(text: string, options: MaskOptions = {}): MaskResult 
     const normalized = word.trim()
     if (normalized === '') continue
     let count = 0
-    out = out.replace(new RegExp(escapeRegExp(normalized), 'gi'), () => {
+    out = out.replace(maskWordPattern(normalized), () => {
       count += 1
       return '[REDACTED_NAME]'
     })

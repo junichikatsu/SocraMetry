@@ -90,7 +90,7 @@ describe('その他の設定', () => {
     expect(fallbackModel()).toBe('google/gemini-2.5-flash')
   })
 
-  it('円換算レートの既定は 150', () => {
-    expect(usdJpyRate()).toBe(150)
+  it('円換算レートの既定は実行環境と揃える（165）', () => {
+    expect(usdJpyRate()).toBe(165)
   })
 })

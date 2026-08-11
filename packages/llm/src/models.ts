@@ -88,8 +88,17 @@ export function orcaApiKey(): string {
   return env('ORCAROUTER_API_KEY')
 }
 
+/**
+ * 円換算レート。
+ *
+ * **既定値は実行環境の設定と揃える。** 既定 150 / 実行環境 165 という状態で、
+ * 設計書の円が 150 換算と 165 換算で混在した（レビューで指摘されて発覚）。
+ * 既定と本番がずれていると、どちらの数字を見ているのか誰にも分からなくなる。
+ *
+ * 効いている値は `GET /v1/health` の `limits.usdJpyRate` で確認できる。
+ */
 export function usdJpyRate(): number {
-  return intEnv('USD_JPY_RATE', 150)
+  return intEnv('USD_JPY_RATE', 165)
 }
 
 /**
