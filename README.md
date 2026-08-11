@@ -3,7 +3,7 @@
 > **AI に答えを出させるのではなく、AI に問いを出させる。**
 > 業務を止めずにデバッグ能力を鍛え、その実力を評価できる形で可視化する、組織のための仕組み。
 
-[![status](https://img.shields.io/badge/status-requirements--definition-orange)]()
+[![status](https://img.shields.io/badge/status-v0.1--implemented-green)]()
 [![target](https://img.shields.io/badge/target-BtoB-blue)]()
 [![license](https://img.shields.io/badge/license-MIT-blue)]()
 
@@ -188,22 +188,13 @@ AI を使うこと自体が目的ではないため、**使う場所と使わな
 
 ## セットアップ
 
-> ⚠️ **現在は設計フェーズのため、以下はまだ動きません。**
-> `package.json` を含む実装は [Day 1](docs/roadmap.md#day-1--土台外部依存の不確実性を消す) で入ります。
-> 本節は [DoD #7](docs/scope-v0.1.md#7-完了の定義definition-of-done)
-> 「README だけを読んで、他人が API キーなしに `MOCK_MODE=true` でローカル起動できる」
-> を満たすための手順を先に定義したものです。
-
-**API キーなしで動かせる状態にします。** `MOCK_MODE=true` が既定で、LLM を一切呼ばずに
-3 ゲートの全導線を通せます。まずこの状態で動かしてください。
-
 ```bash
 git clone https://github.com/junichikatsu/SocraMetry.git
 cd SocraMetry
 pnpm install
 
-cp .env.example .env      # MOCK_MODE=true が既定。編集は不要
-pnpm dev                  # http://localhost:3000
+cp .env.example .env      # MOCK_MODE=true が既定
+pnpm dev                  # http://localhost:8787
 ```
 
 | 前提 | バージョン |
@@ -211,26 +202,41 @@ pnpm dev                  # http://localhost:3000
 | Node.js | 22.x |
 | pnpm | 9.x |
 
-> **なぜ MOCK を既定にしているか**: OrcaRouter の API キーは配布できないため、
-> 実 LLM を前提にすると**第三者は原理的に起動できません**。
-> MOCK モードは固定の診断・ヒント・設問を返すので、キーなしで体験を確認できます。
-> 開発中の LLM 課金がゼロになり、自動テストも決定的になります
-> （[scope-v0.1.md §4.3](docs/scope-v0.1.md#43-mock-モードを最初に作る)）。
+これで画面と `GET /v1/health` は開きます。
 
-### 実 LLM で動かす場合（API キーが必要）
+### ⚠️ ローカルだけでは 3 ゲートを通せません
 
-OrcaRouter のキーを持っている場合のみ。`.env` を以下のように変更します。
+**`MOCK_MODE=true` が消すのは LLM の呼び出しだけ**です（[ADR-014](docs/architecture.md#adr-014-mock-モードを最初に実装する)）。
+データストアは **enebular が実行環境に注入する接続情報**を使うため、
+ローカルで API を通しで叩くには enebular のデータストアに接続できる状態が必要です。
+
+接続情報がない状態で API を叩くと `503 DATASTORE_UNAVAILABLE` が返ります
+（起動と `/v1/health` は落ちません）。
+
+**MOCK モードでの導線確認は自動テストで行います。**
 
 ```bash
-MOCK_MODE=false
-ORCA_API_KEY=<your-key>
-MODEL_DIAGNOSER=<高品質モデル>    # 原因特定。1 セッション 1 回
-MODEL_QUESTIONER=<安価モデル>     # ヒント・出題。1 セッション 10〜15 回
-MODEL_JUDGE=<安価モデル>          # 到達判定
+pnpm test     # 216 件。LLM もデータストアも呼ばないため課金ゼロ
 ```
 
-モデル ID の選び方と単価は [cost-model.md](docs/cost-model.md) を参照してください。
-**キーはサーバ側の環境変数にのみ置き、フロントエンドには渡しません**（NFR-S1）。
+`apps/function/src/api.test.ts` が、データストアを同じインターフェースの代替に
+差し替えたうえで、ログイン → 3 ゲート → スコアまでを通しで検証しています。
+
+> **これは [DoD #7](docs/scope-v0.1.md#7-完了の定義definition-of-done)
+> 「README だけを読んで、API キーなしに `MOCK_MODE=true` でローカル起動できる」を
+> 完全には満たしていません。** データストアにインメモリ実装を持たない判断をしたためです
+> （[ADR-014](docs/architecture.md#adr-014-mock-モードを最初に実装する) の適用範囲を
+> LLM に限定している）。**やっていないことを「やった」と書かない**方針に従い、
+> ここは正直に記載しています。
+
+### 実 LLM で動かす場合
+
+OrcaRouter の API キーと、enebular のデータストアが必要です。
+環境変数の一覧は [.env.example](.env.example)、設定手順は
+[deployment.md §3.3](docs/deployment.md#33-環境変数の設定手順-6) を参照してください。
+
+**実測コストは 1 セッションあたり 4.9〜6.8 円**です
+（[cost-model.md §5.4](docs/cost-model.md#54-実測結果)）。
 
 ## ドキュメント
 
@@ -252,10 +258,18 @@ MODEL_JUDGE=<安価モデル>          # 到達判定
 
 ## 現在のステータス
 
-**設計フェーズ完了。実装はこれから。**
-`apps/` `packages/` は構成を確定させるための空スケルトンで、
-`.github/workflows/` のデプロイ定義も実装が入るまで手動実行のみに絞ってあります。
-**「セットアップ」の手順は完成時点のもので、現時点では動作しません。**
+**v0.1 のバックエンドは実装済みで、実際の LLM につないで動作を確認しています。**
+
+| | 状況 |
+|---|---|
+| バックエンド API | ✅ 3 ゲート・簡易ログイン・スコア・履歴・コストログ |
+| フロントエンド | ⚠️ **動作確認用の暫定画面**。正式なデザインは別途 |
+| デプロイ | ✅ enebular クラウド実行環境（手動実行のワークフロー） |
+| 自動テスト | ✅ 216 件 |
+| 実測コスト | ✅ 1 セッション 4.9〜6.8 円（[cost-model.md §5.4](docs/cost-model.md#54-実測結果)） |
+
+**v0.2 の組織機能**（演習モード・問題集・組織ダッシュボード・ロール管理）は
+予定どおり未実装です。実装対象の判断は [scope-v0.1.md](docs/scope-v0.1.md) が正です。
 
 次は [Day 1: 土台](docs/roadmap.md#day-1--土台外部依存の不確実性を消す) から着手します。
 

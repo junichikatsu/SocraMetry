@@ -2,9 +2,9 @@
 
 | 項目 | 内容 |
 |---|---|
-| ドキュメント版数 | v0.3 |
-| 更新日 | 2026-08-09 |
-| 主な変更 | **認証を導入（BtoB）。** 3 ゲート方式に合わせて問答系を再構成し、組織 / ダッシュボード / 演習割り当て / 問題集の API を追加 |
+| ドキュメント版数 | v0.4 |
+| 更新日 | 2026-08-11 |
+| 主な変更 | **v0.1 の実装に合わせて追記。** §2.1a に簡易認証の 3 本、問答系に `GET /cost`、`/v1/health` の応答を明記 |
 | ホスト | enebular クラウド実行環境の HTTP トリガー URL |
 
 > ⚠️ **v0.1 の実装対象は §2.1（問答）と §2.2（個人）のみ。**
@@ -137,16 +137,53 @@ Set-Cookie: sm_session=<jwt>; HttpOnly; Secure; SameSite=None; Max-Age=86400; Pa
 | POST | `/v1/sessions/:id/reveal` | **Gate C**: 解説を読む（遷移条件を満たす場合のみ） | member | 〜1 秒 |
 | POST | `/v1/sessions/:id/retrospect` | Gate C 後の振り返り 1 問に回答する | member | 〜1 秒 |
 | GET | `/v1/sessions/:id/report` | 振り返りレポートとスコア | member | 〜10 秒（初回） |
+| GET | `/v1/sessions/:id/cost` | **1 セッションの実測コスト**（F11 / 下記） | member | 〜1 秒 |
 | DELETE | `/v1/sessions/:id` | セッション削除（NFR-S7） | member | 〜2 秒 |
+
+> **`GET /cost` は本書の初版に無かったエンドポイント。** 実測コスト表
+> （[cost-model.md §5.4](cost-model.md#54-実測結果)）を埋めるには `ops_logs` を読む手段が要り、
+> 無いと実行環境のログを人が読むしかない。デモ台本 #6「コストログを見せる」も
+> 画面から出せない。`ops_logs` のメインキーは `sessionId` で `ownerId` を含まないため、
+> **先に `sessions` を読んで所有者を確認してから**でなければ呼んではならない。
+
+### 2.1a 認証（v0.1 の簡易実装）
+
+本書の §1 は OIDC / OAuth を前提に書かれているが、**v0.1 は簡易認証**
+（メール + パスワード + 招待コード / [scope-v0.1.md §4.2](scope-v0.1.md#42-認証を最小構成にする)）。
+そのため以下の 3 本が実装されている。**認証不要で到達できるのはここと `/v1/health` だけ。**
+
+| メソッド | パス | 説明 |
+|---|---|---|
+| POST | `/v1/auth/signup` | 招待コード必須。成功で Cookie を発行し `201` |
+| POST | `/v1/auth/login` | Cookie を発行 |
+| POST | `/v1/auth/logout` | Cookie を破棄（JWT はステートレスなのでサーバ側に破棄する状態はない） |
+
+```jsonc
+// POST /v1/auth/signup
+{ "email": "sato@example.com", "password": "8 文字以上", "displayName": "佐藤", "inviteCode": "..." }
+// → { "me": { "userId": "usr_9d0e11", "email": "...", "displayName": "佐藤" } }
+```
+
+| HTTP | code | 意味 |
+|---|---|---|
+| 403 | `INVALID_INVITE_CODE` | 招待コードが違う |
+| 409 | `EMAIL_TAKEN` | 登録済みのメールアドレス |
+| 401 | `INVALID_CREDENTIALS` | メールまたはパスワードが違う（**どちらかは返さない**） |
+
+> **Cookie の `Path` はトリガーのパス配下に絞る。** enebular は 1 ホストを複数
+> インスタンスがパスで分け合うため、`Path=/` だと同じホストの**他の関数にも
+> JWT が送信される**（`HttpOnly` は JS からの読み取りを防ぐだけで、送信は止められない）。
+> トリガーのパスは設定として持たず（[ADR-009](architecture.md#adr-009-hono-を-lambda-ハンドラのルーターとして使う)）、
+> リクエストのパスから導く。
 
 ### 2.2 個人（利用者向け）
 
 | メソッド | パス | 説明 | ロール |
 |---|---|---|---|
-| GET | `/v1/me` | 自分のプロフィールとロール | member |
+| GET | `/v1/me` | 自分のプロフィール（v0.1 はロールを持たない） | member |
 | GET | `/v1/me/sessions` | 自分の履歴一覧 | member |
-| GET | `/v1/me/stats` | 自分のダッシュボード（到達ゲート分布・5 軸推移・成長率） | member |
-| GET | `/v1/me/assignments` | 自分に割り当てられた演習一覧 | member |
+| GET | `/v1/me/stats` | 自分のダッシュボード（到達ゲート分布・5 軸推移）※成長率は v0.2 | member |
+| GET | `/v1/me/assignments` | 自分に割り当てられた演習一覧 ※**v0.2** | member |
 
 ### 2.3 演習・問題集（BtoB）
 
@@ -171,7 +208,30 @@ Set-Cookie: sm_session=<jwt>; HttpOnly; Secure; SameSite=None; Max-Age=86400; Pa
 | GET | `/v1/org/settings` | 組織設定 | admin |
 | PATCH | `/v1/org/settings` | ランキング可否・保持期間などを変更する | admin |
 | POST | `/v1/org/reports/evaluation` | **評価レポートを出力**（FR-27） | admin |
-| GET | `/v1/health` | ヘルスチェック（認証不要） | — |
+| GET | `/v1/health` | ヘルスチェック（認証不要 / 下記） | — |
+
+**`GET /v1/health` の応答**
+
+```jsonc
+{
+  "status": "ok",
+  "version": "0.1.0",
+  "commit": "d66a9ca...",        // デプロイしたコミットが動いているかの確認用
+  "builtAt": "2026-08-11T01:02:11.458Z",
+  "mockMode": false,             // 本番で true のまま公開していないかの目視確認（deployment.md §6 #10）
+  "configOk": true,              // 環境変数の設定漏れ。★キー名は返さない（認証不要のため）
+  "configMissing": 0,
+  "limits": {                    // 実際に効いている設定値。環境変数と既定値のどちらが効いているか外から分かる
+    "stages": 5,                 //   Gate B の段階数（DEMO_MAX_STAGES）
+    "diagnoser": 1600,           //   役割別の max_tokens
+    "hinter": 300, "questioner": 900, "judge": 500, "revealer": 1000, "reporter": 1000
+  }
+}
+```
+
+> **`limits` を返すのは、設定の食い違いを LLM を呼ばずに確認するため。**
+> 環境変数を消したのに古い値が効いたままの状態を切り分けられず、
+> 実際に LLM 呼び出しを 2 回無駄にした。値は上限であって秘匿情報ではない。
 
 > **すべてのレイテンシは実行環境のタイムアウト設定内に収める必要がある。**
 > タイムアウトは `enebular bulk-update cloud-config` の `timeout` で設定する。
