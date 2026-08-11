@@ -31,6 +31,18 @@ describe('GET /v1/health の出力上限', () => {
     expect(body.limits.questioner).toBe(900)
   })
 
+  it('Gate B の段階数も返す（5 軸のうち何軸が採点対象かが決まる）', async () => {
+    const res = await app.request('/v1/health')
+    const body = (await res.json()) as { limits: Record<string, number> }
+    expect(body.limits.stages).toBe(5)
+
+    process.env['DEMO_MAX_STAGES'] = '3'
+    const demo = await app.request('/v1/health')
+    const demoBody = (await demo.json()) as { limits: Record<string, number> }
+    expect(demoBody.limits.stages).toBe(3)
+    delete process.env['DEMO_MAX_STAGES']
+  })
+
   it('環境変数で上書きされていればその値が出る', async () => {
     process.env['MAX_TOKENS_DIAGNOSER'] = '800'
     const res = await app.request('/v1/health')

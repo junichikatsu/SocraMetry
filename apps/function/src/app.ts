@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
-import { checkConfig } from './config'
+import { checkConfig, demoMaxStages } from './config'
+import { resolveTotalStages } from '@socrametry/core'
 import { maxTokensFor } from '@socrametry/llm'
 import { requireAuth, type AppEnv } from './middleware/auth'
 import { toErrorResponse } from './middleware/error-handler'
@@ -56,6 +57,12 @@ function createRoutes() {
        * 秘匿情報ではないが、認証不要のエンドポイントなので最小限にとどめる。
        */
       limits: {
+        /**
+         * Gate B で出題する段階数（`DEMO_MAX_STAGES`）。
+         * これが 3 だと 5 軸のうち 2 つが「出題対象外」になる。
+         * 設定が効いているかを LLM を呼ばずに確認できるようにしておく
+         */
+        stages: resolveTotalStages(demoMaxStages()),
         diagnoser: maxTokensFor('diagnoser'),
         hinter: maxTokensFor('hinter'),
         questioner: maxTokensFor('questioner'),
