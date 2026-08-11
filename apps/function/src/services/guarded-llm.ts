@@ -51,9 +51,12 @@ export async function generateGuardedQuestion(params: {
     ...(params.rootCause === null ? {} : { rootCause: params.rootCause }),
   }
 
+  // 1 回目は素の制約で、2 回目は**何が駄目だったか**を伝えて再生成する
+  let regenerateReason: 'leak' | 'shape' | null = null
+
   for (const attempt of [0, 1]) {
     try {
-      const result = await generateQuestion({ ...params.input, strict: attempt === 1 })
+      const result = await generateQuestion({ ...params.input, regenerateReason })
       calls.push(...result.calls)
 
       const leak = checkLeakInParts(inspectableParts(result.data), guardOptions)
@@ -72,6 +75,8 @@ export async function generateGuardedQuestion(params: {
       // 検出イベントは構造化ログに記録する（プロンプト改善のため）
       if (leak.leaked) logLeak('questioner', params.input.stage, leak.rules, attempt)
       if (shape.invalid) logShape('questioner', params.input.stage, shape.rules, attempt)
+      // 漏洩の方が重い。両方出たら漏洩の指示を優先する
+      regenerateReason = leak.leaked ? 'leak' : 'shape'
       const last = calls[calls.length - 1]
       if (last) last.leakGuardHit = true
     } catch (cause) {

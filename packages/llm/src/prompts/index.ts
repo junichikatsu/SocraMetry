@@ -142,16 +142,28 @@ export function questionerPrompt(input: {
   distractorThemes: string[]
   /** 同段階で既に出した設問。角度を変えるために渡す */
   previousQuestions: string[]
-  /** LeakGuard が漏洩を検出したあとの再生成か（制約を強める） */
-  strict: boolean
+  /**
+   * 再生成のときは**何が駄目だったか**を渡す。
+   * 「やり直して」だけでは同じ失敗を繰り返し、定型テンプレートに落ちる。
+   * 実際、形の不備で再生成したのに漏洩の注意しか伝えておらず、
+   * 個別化された設問を作れずテンプレートへ退避していた。
+   */
+  regenerateReason?: 'leak' | 'shape' | null
 }): PromptPair {
   const stage = STAGE_LABELS[input.stage]
-  const strictNote = input.strict
-    ? `
+  const REGENERATE_NOTE: Record<'leak' | 'shape', string> = {
+    leak: `
 【再生成】前回の生成は答えを漏らしていると判定されました。
 今回は特に、断定表現（「原因は」「〜が原因です」「〜のせいで」「〜を直せば」）と
-修正手順を一切含めないでください。問いは事実の確認に寄せてください。`
-    : ''
+修正手順を一切含めないでください。問いは事実の確認に寄せてください。`,
+    shape: `
+【再生成】前回の生成は**出題として成立していませんでした。**
+「〜は正しいですか？」に対して「はい / いいえ」を並べる形になっていた可能性があります。
+あなたは原因を知らないため、その形では正解を決められません。
+今回は「**どこを見るか**」「**そこから何が言えるか**」「**次に何をするか**」のいずれかを問い、
+選択肢はすべて**具体的な観点や対象**にしてください（真偽の返答にしない）。`,
+  }
+  const strictNote = input.regenerateReason ? REGENERATE_NOTE[input.regenerateReason] : ''
 
   return {
     system: `${COMMON_PERSONA}

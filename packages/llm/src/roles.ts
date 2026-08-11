@@ -72,8 +72,8 @@ export type QuestionerInput = ErrorContext & {
   focusHint: string | null
   distractorThemes: string[]
   previousQuestions: string[]
-  /** LeakGuard 検出後の再生成か。制約を強めたプロンプトになる */
-  strict?: boolean
+  /** 再生成の理由。何が駄目だったかを伝えないと同じ失敗を繰り返す */
+  regenerateReason?: 'leak' | 'shape' | null
 }
 
 export function generateQuestion(input: QuestionerInput): Promise<LlmResult<QuestionerOutput>> {
@@ -85,7 +85,7 @@ export function generateQuestion(input: QuestionerInput): Promise<LlmResult<Ques
   }
   return callJson({
     role: 'questioner',
-    ...questionerPrompt({ ...input, strict: input.strict ?? false }),
+    ...questionerPrompt({ ...input, regenerateReason: input.regenerateReason ?? null }),
     schema: questionerOutputSchema,
   })
 }
