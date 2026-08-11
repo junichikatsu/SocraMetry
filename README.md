@@ -197,6 +197,25 @@ AI を使うこと自体が目的ではないため、**使う場所と使わな
 **API キーなしで動かせる状態にします。** `MOCK_MODE=true` が既定で、LLM を一切呼ばずに
 3 ゲートの全導線を通せます。まずこの状態で動かしてください。
 
+### 前提ツール
+
+| 前提 | バージョン |
+|---|---|
+| Node.js | 22.x |
+| pnpm | 11.x |
+
+pnpm はリポジトリに同梱されないため、**先にグローバルインストールが必要**です。
+
+```bash
+npm install -g pnpm@11
+pnpm --version            # 11.x が表示されれば OK
+```
+
+> Node.js 同梱の Corepack を使う場合は `corepack enable pnpm` でも構いません。
+> `package.json` の `packageManager`（`pnpm@11.11.0`）が読まれ、同じ版が自動で使われます。
+
+### 起動
+
 ```bash
 git clone https://github.com/junichikatsu/SocraMetry.git
 cd SocraMetry
@@ -205,11 +224,6 @@ pnpm install
 cp .env.example .env      # MOCK_MODE=true が既定。編集は不要
 pnpm dev                  # http://localhost:3000
 ```
-
-| 前提 | バージョン |
-|---|---|
-| Node.js | 22.x |
-| pnpm | 9.x |
 
 > **なぜ MOCK を既定にしているか**: OrcaRouter の API キーは配布できないため、
 > 実 LLM を前提にすると**第三者は原理的に起動できません**。
