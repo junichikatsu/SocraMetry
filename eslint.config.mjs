@@ -26,6 +26,17 @@ export default tseslint.config(
     },
   },
   {
+    // 運用スクリプト。Node 18+ の実行前提で、fetch などの標準グローバルを使う
+    files: ['scripts/**/*.mjs'],
+    languageOptions: {
+      globals: {
+        console: 'readonly',
+        fetch: 'readonly',
+        process: 'readonly',
+      },
+    },
+  },
+  {
     // フロントエンド（ADR-013: フレームワークなし・ビルド工程なし）。
     // ブラウザで直接実行されるため、Node ではなくブラウザのグローバルを持つ。
     files: ['apps/web/public/**/*.js'],
