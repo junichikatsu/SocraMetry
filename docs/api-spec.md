@@ -2,9 +2,9 @@
 
 | 項目 | 内容 |
 |---|---|
-| ドキュメント版数 | v0.4 |
+| ドキュメント版数 | v0.5 |
 | 更新日 | 2026-08-11 |
-| 主な変更 | **v0.1 の実装に合わせて追記。** §2.1a に簡易認証の 3 本、問答系に `GET /cost`、`/v1/health` の応答を明記 |
+| 主な変更 | **v0.2 スコープ確定にともなう追記**（[scope-v0.2.md](scope-v0.2.md) / #28）。マスキング辞書（FR-41）と異議申し立て（NFR-F6）のエンドポイント、組織プロビジョニングの方針を追加 |
 | ホスト | enebular クラウド実行環境の HTTP トリガー URL |
 
 > ⚠️ **v0.1 の実装対象は §2.1（問答）と §2.2（個人）のみ。**
@@ -139,6 +139,13 @@ Set-Cookie: sm_session=<jwt>; HttpOnly; Secure; SameSite=None; Max-Age=86400; Pa
 | GET | `/v1/sessions/:id/report` | 振り返りレポートとスコア | member | 〜10 秒（初回） |
 | GET | `/v1/sessions/:id/cost` | **1 セッションの実測コスト**（F11 / 下記） | member | 〜1 秒 |
 | DELETE | `/v1/sessions/:id` | セッション削除（NFR-S7） | member | 〜2 秒 |
+| POST | `/v1/sessions/:id/dispute` | **判定への異議申し立て**（NFR-F6）※**v0.2** | member | 〜1 秒 |
+
+> **`POST /dispute`（v0.2）**: 到達判定・スコアへの「この判定はおかしい」報告
+> （[evaluation-model.md §4.5](evaluation-model.md#45-説明可能性nfr-f1--nfr-f6)）。
+> ボディは `{ "reason": "..." }`（〜1,000 文字・マスキング適用）。
+> セッションアイテムに `dispute` として記録し、`lead` 以上の一覧で表示する。
+> v0.2 では**記録と表示まで**（ワークフロー・再判定はしない）。
 
 > **`GET /cost` は本書の初版に無かったエンドポイント。** 実測コスト表
 > （[cost-model.md §5.4](cost-model.md#54-実測結果)）を埋めるには `ops_logs` を読む手段が要り、
@@ -207,8 +214,18 @@ Set-Cookie: sm_session=<jwt>; HttpOnly; Secure; SameSite=None; Max-Age=86400; Pa
 | GET | `/v1/org/ranking` | ランキング（**組織設定で有効な場合のみ**） | member |
 | GET | `/v1/org/settings` | 組織設定 | admin |
 | PATCH | `/v1/org/settings` | ランキング可否・保持期間などを変更する | admin |
+| GET | `/v1/org/mask-dictionary` | **組織別マスキング辞書**（FR-41）。送信前プレビューが使う | member |
+| PUT | `/v1/org/mask-dictionary` | 辞書の全量置き換え | admin |
 | POST | `/v1/org/reports/evaluation` | **評価レポートを出力**（FR-27） | admin |
 | GET | `/v1/health` | ヘルスチェック（認証不要 / 下記） | — |
+
+> **マスキング辞書は認証必須で返す**（FR-41）。辞書そのものが「その組織の顧客名一覧」であり、
+> 未認証で取得できると辞書自体が情報漏洩になる。格納先は
+> [data-model.md §3.4](data-model.md#34-org_directory--組織設定とメンバー) の `sk: "mask_dictionary"`。
+>
+> **組織（テナント）の作成 API は v0.2 では提供しない。** 運営者が
+> `org_directory` に `meta` と最初の `admin` を作成して管理者に招待を渡す
+> （[scope-v0.2.md §4.7](scope-v0.2.md#47-組織のプロビジョニングはセルフサービスにしない)）。
 
 **`GET /v1/health` の応答**
 

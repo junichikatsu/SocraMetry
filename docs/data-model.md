@@ -2,9 +2,9 @@
 
 | 項目 | 内容 |
 |---|---|
-| ドキュメント版数 | v0.5 |
+| ドキュメント版数 | v0.6 |
 | 更新日 | 2026-08-11 |
-| 主な変更 | **§4 の前提を訂正。** 「単一ユーザーの逐次操作が前提」は誤りで、ADR-006 が意図的に並行実行を作っている。実装中に実環境で発現した事象と、その対策を追記 |
+| 主な変更 | **v0.2 スコープ確定にともなう追記**（[scope-v0.2.md](scope-v0.2.md) / #28）。`org_directory` にマスキング辞書（FR-41）の格納先を追加。§6 に「v0.1 のデータは v0.2 に移行しない」方針を明記 |
 | 参照 | [データストア概要](https://docs.enebular.com/ja/datastore/overview) / [@uhuru/enebular-sdk](https://www.npmjs.com/package/@uhuru/enebular-sdk) |
 
 > ⚠️ **v0.1 の実装対象は 5 テーブル**（`users` / `sessions` / `session_secrets` / `reports` / `ops_logs`）。
@@ -66,7 +66,7 @@ ownerId = "<tenantId>:<memberId>"
 | 3 | `session_secrets` | `sessionId` | `kind` | 文字列 | **内部診断と正解** | v0.1 | **✗ 非公開** |
 | 4 | `reports` | `ownerId` | `sessionId` (ULID) | 文字列 | 振り返りレポート + スコア | v0.1 | ○ |
 | 5 | `ops_logs` | `sessionId` | `ts` | **数値** (epoch ms) | LLM 呼び出しログ (NFR-O2) | v0.1 | ✗ 運用用 |
-| 6 | **`org_directory`** | `tenantId` | `"meta"` \| `"member#<memberId>"` | 文字列 | 組織設定・メンバー・ロール | v0.2 | ○ |
+| 6 | **`org_directory`** | `tenantId` | `"meta"` \| `"member#<memberId>"` \| `"mask_dictionary"` | 文字列 | 組織設定・メンバー・ロール・マスキング辞書 | v0.2 | ○ |
 | 7 | **`member_stats`** | `tenantId` | `memberId` | 文字列 | **事前計算した集計**（ダッシュボード用） | v0.2 | ○ |
 | 8 | **`assignments`** | `ownerId` | `assignmentId` (ULID) | 文字列 | 演習問題の割り当てと進捗 | v0.2 | ○ |
 | 9 | **`question_bank`** | `tenantId` | `problemId` (ULID) | 文字列 | 社内問題集 | v0.2 | ○ |
@@ -358,6 +358,26 @@ Crockford Base32 であり、**文字列としての辞書順 = 生成時刻順*
 
 > **ロールは必ずサーバ側でこのアイテムから引く。** クライアントから送られた
 > ロールを信用しない（NFR-S6）。
+
+#### `sk: "mask_dictionary"` — 組織別マスキング辞書（FR-41）
+
+v0.1 の除外語リスト（環境変数 `MASK_WORDS`・単一）を、組織ごとに管理できる形へ昇格させたもの。
+**決定的な完全一致処理のまま、対象範囲だけが広がる**（[security.md §3](security.md#3-秘匿情報のマスキングr1-への対策)）。
+
+```jsonc
+{
+  "tenantId": "org_ac31f2",
+  "sk": "mask_dictionary",
+  "words": ["アクメ商事", "ACME", "project-neptune"],   // 完全一致で [REDACTED_NAME] に置換
+  "updatedBy": "usr_admin01",
+  "updatedAt": 1786000000000
+}
+```
+
+> **辞書は認証後にのみ返す**（FR-41）。辞書そのものが「その組織の顧客名一覧」であり、
+> 未認証で取得できると辞書自体が情報漏洩になる。
+> フロントの送信前プレビューは、ログイン後に取得した辞書を `MASK_WORDS` と併合して使う。
+> サイズは 350KB 上限に対して十分小さい想定（数百語）。超える運用が見えたら分割を検討する。
 
 ---
 
@@ -694,6 +714,18 @@ for (const table of [TABLE_SESSIONS, TABLE_REPORTS]) {
 - 途中で失敗しても再実行できるよう put → delete の順にする（重複は起きるが欠損しない）
 - 移行したセッションは `comparable: false` のままとし、**評価データには算入しない**
   （デモ時の成績を評価に持ち込まない）
+
+### v0.1（個人利用）から v0.2（テナント）への移行
+
+**v0.1 のデータは v0.2 に移行しない**（[scope-v0.2.md §4.1](scope-v0.2.md#41-v01-の個人データは-v02-に移行しない)）。
+
+- v0.1 の `ownerId` は `usr_<id>`（テナントなし）であり、v0.2 の `<tenantId>:<memberId>` とは
+  メインキーの形式が違う。v0.1 は招待制の検証利用で、データは検証セッションが主のため、
+  **移行バッチは作らず、メンバーは新しい組織テナントで登録し直す**
+- `users` テーブルは SSO / 組織移行をもって役目を終える（§3.9）。
+  アカウントは `org_directory` の `member#<memberId>` に作り直す
+- 個別に引き継ぎたいセッションが出た場合のみ、上記のデモ移行と同じ
+  read → put → delete 手順を流用する（`comparable: false` のまま）
 
 ---
 

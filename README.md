@@ -265,6 +265,7 @@ OrcaRouter の API キーと、enebular のデータストアが必要です。
 | ドキュメント | 内容 |
 |---|---|
 | **[v0.1 スコープ](docs/scope-v0.1.md)** | **直近で作るもの / 作らないもの・設計判断・完了の定義** |
+| [v0.2 スコープ](docs/scope-v0.2.md) | 組織導入・演習・評価の要件と設計判断（v0.2 の唯一の正） |
 | [要件定義書](docs/requirements.md) | 課題・ペルソナ・機能要件・非機能要件・AI の必然性・ビジネス成立性 |
 | [アーキテクチャと技術選定](docs/architecture.md) | 構成図・ADR 14 件・キャパシティ試算・フォルダ構成 |
 | [ソクラテス式エンジン仕様](docs/socratic-engine.md) | 3 ゲート・二層 LLM 構成・答え漏洩ガード |
@@ -289,7 +290,8 @@ OrcaRouter の API キーと、enebular のデータストアが必要です。
 | 実測コスト | ✅ 1 セッション 4.9〜6.8 円（[cost-model.md §5.4](docs/cost-model.md#54-実測結果)） |
 
 **v0.2 の組織機能**（演習モード・問題集・組織ダッシュボード・ロール管理）は
-予定どおり未実装です。実装対象の判断は [scope-v0.1.md](docs/scope-v0.1.md) が正です。
+予定どおり未実装です。v0.1 の実装対象の判断は [scope-v0.1.md](docs/scope-v0.1.md)、
+v0.2 の要件と設計判断は [scope-v0.2.md](docs/scope-v0.2.md) が正です。
 
 次は [Day 1: 土台](docs/roadmap.md#day-1--土台外部依存の不確実性を消す) から着手します。
 
