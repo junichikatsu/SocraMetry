@@ -255,7 +255,9 @@ OrcaRouter の API キーと、enebular のデータストアが必要です。
 環境変数の一覧は [.env.example](.env.example)、設定手順は
 [deployment.md §3.3](docs/deployment.md#33-環境変数の設定手順-6) を参照してください。
 
-**1 セッションあたり 4.9〜6.8 円**です（推定 / 1 USD = 165 円）
+**1 セッションあたり 4.9〜6.8 円**です（1 USD = 165 円）。
+到達ゲートで変わり、Gate A で自力解決すると 4.9 円、Gate C まで到達すると 6.8 円です。
+**OrcaRouter の請求と突き合わせ済み**（差 6%）。
 （[cost-model.md §5.4](docs/cost-model.md#54-実測結果)）。
 
 ## ドキュメント
