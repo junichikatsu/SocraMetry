@@ -188,6 +188,25 @@ AI を使うこと自体が目的ではないため、**使う場所と使わな
 
 ## セットアップ
 
+### 前提ツール
+
+| 前提 | バージョン |
+|---|---|
+| Node.js | 22.x |
+| pnpm | 11.x |
+
+pnpm はリポジトリに同梱されないため、**先にグローバルインストールが必要**です。
+
+```bash
+npm install -g pnpm@11
+pnpm --version            # 11.x が表示されれば OK
+```
+
+> Node.js 同梱の Corepack を使う場合は `corepack enable pnpm` でも構いません。
+> `package.json` の `packageManager`（`pnpm@11.11.0`）が読まれ、同じ版が自動で使われます。
+
+### 起動
+
 ```bash
 git clone https://github.com/junichikatsu/SocraMetry.git
 cd SocraMetry
@@ -196,11 +215,6 @@ pnpm install
 cp .env.example .env      # MOCK_MODE=true が既定
 pnpm dev                  # http://localhost:8787
 ```
-
-| 前提 | バージョン |
-|---|---|
-| Node.js | 22.x |
-| pnpm | 9.x |
 
 これで画面と `GET /v1/health` は開きます。
 
@@ -221,6 +235,12 @@ pnpm test     # 216 件。LLM もデータストアも呼ばないため課金�
 
 `apps/function/src/api.test.ts` が、データストアを同じインターフェースの代替に
 差し替えたうえで、ログイン → 3 ゲート → スコアまでを通しで検証しています。
+
+> **なぜ MOCK を既定にしているか**: OrcaRouter の API キーは配布できないため、
+> 実 LLM を前提にすると**第三者は原理的に起動できません**。
+> MOCK モードは固定の診断・ヒント・設問を返すので、
+> 開発中の LLM 課金がゼロになり、自動テストも決定的になります
+> （[scope-v0.1.md §4.3](docs/scope-v0.1.md#43-mock-モードを最初に作る)）。
 
 > **これは [DoD #7](docs/scope-v0.1.md#7-完了の定義definition-of-done)
 > 「README だけを読んで、API キーなしに `MOCK_MODE=true` でローカル起動できる」を
