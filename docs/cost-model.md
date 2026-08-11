@@ -234,9 +234,9 @@ export function estimateCost(model: string, promptTokens: number, completionToke
 | 使用モデル（高品質） | `anthropic/claude-sonnet-4.6`（Diagnoser / Revealer / Reporter） |
 | 使用モデル（安価） | `openai/gpt-4o-mini`（Hinter / Questioner / Judge） |
 | 退避先 | `google/gemini-2.5-flash` |
-| 実測セッション数 | 2（Gate A 到達 1 / Gate C 到達 1） |
-| 平均コスト / セッション | **約 5.8 円**（4.87 円 / 6.70 円） |
-| 試算との差 | 試算 6.5 円に対し **ほぼ一致**（−11%） |
+| 実測セッション数 | 3（Gate A 到達 1 / Gate C 到達 2） |
+| 平均コスト / セッション | **約 5.9 円**（4.87〜6.83 円） |
+| 試算との差 | 試算 6.5 円に対し **ほぼ一致**（±5%） |
 
 **Gate A で自力到達した場合（4 回・約 4.87 円 / 0.0295 USD）**
 
@@ -247,9 +247,20 @@ export function estimateCost(model: string, promptTokens: number, completionToke
 | Judge | 安価 | 818 | 74 | 1.3s |
 | Reporter | 高品質 | 1,015 | 437 | 11.8s |
 
-**Gate C まで到達した場合（8 回・約 6.70 円 / 0.0406 USD）**
-Questioner が 3 回（`DEMO_MAX_STAGES=3` の運用）。5 段階運用では Questioner が
-10 回前後に増えるが、安価モデルのため**増分は 1 円未満**の見込み。
+**Gate C まで到達した場合（既定の 5 段階・10 回・約 6.83 円 / 0.0414 USD）**
+
+| 役割 | モデル | 回数 | 入力 tok | 出力 tok |
+|---|---|---:|---:|---:|
+| Hinter | 安価 | 1 | 363 | 24 |
+| Diagnoser | 高品質 | 1 | 1,192 | 958 |
+| Questioner | 安価 | 5 | 約 5,900 | 約 1,100 |
+| Judge | 安価 | 1 | 818 | 40 |
+| Revealer | 高品質 | 1 | 約 700 | 578 |
+| Reporter | 高品質 | 1 | 約 1,000 | 435 |
+
+段階数を 3 に絞った運用では 6.19 円。**5 段階との差は 0.64 円**で、
+Questioner が安価モデルであることの効果がそのまま出ている
+（出し分けをしなければ、この 2 回分だけで 1 円を超える）。
 
 ### 5.5 実測から分かったこと
 
@@ -265,9 +276,9 @@ Questioner が 3 回（`DEMO_MAX_STAGES=3` の運用）。5 段階運用では Q
 | 役割 | 実測の最大出力 | 設定値 | 余裕 |
 |---|---:|---:|---|
 | Diagnoser | 1,075 | 1,600 | 1.5 倍 |
-| Revealer | 513 | 1,000 | 1.9 倍 |
+| Revealer | 578 | 1,000 | 1.7 倍 |
 | Reporter | 494 | 1,000 | 2.0 倍 |
-| Questioner | 243 | 900 | 3.7 倍 |
+| Questioner | 264 | 900 | 3.4 倍 |
 | Judge | 74 | 500 | 6.8 倍 |
 | Hinter | 24 | 300 | 12.5 倍 |
 
