@@ -150,6 +150,21 @@
 
     <!-- ── 対話 ────────────────────────────────────────────────────────── -->
     <section id="view-chat" class="view">
+      <!--
+        貼られたエラーを固定表示する。この画面は「エラーを正確に読めるか」を
+        測っているので（evaluation-model.md の観察軸）、対象がスクロールで
+        消えてはいけない。既定は畳んでおき、スレッドの縦を奪わない。
+      -->
+      <section id="errorlog" class="errorlog" hidden aria-label="貼ったエラー">
+        <button id="errorlog-toggle" class="errorlog__head" type="button" aria-expanded="false" aria-controls="errorlog-body">
+          <span class="errorlog__mark" aria-hidden="true">▶</span>
+          <span class="errorlog__title">貼ったエラー</span>
+          <span id="errorlog-summary" class="errorlog__summary"></span>
+          <span class="errorlog__action">全文</span>
+        </button>
+        <ol id="errorlog-body" class="errorlog__body"></ol>
+      </section>
+
       <div id="thread" class="thread" aria-live="polite"></div>
 
       <div class="composer">

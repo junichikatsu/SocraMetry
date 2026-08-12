@@ -86,12 +86,13 @@ export function bot(content) {
 
 /**
  * 利用者の発言。`code` はエラーテキストなど**そのまま等幅で見せたい**もの。
- * @param {{ who: string, text?: string, code?: string }} content
+ * @param {{ who: string, text?: string, code?: string, note?: string }} content
  */
 export function user(content) {
   const { root, bubble } = shell({ who: `${content.who} (DEVELOPER)`, mine: true, avatar: '🧑' })
   if (content.text) bubble.appendChild(el('p', 'msg__text', content.text))
   if (content.code) bubble.appendChild(el('pre', 'msg__code', content.code))
+  if (content.note) bubble.appendChild(el('p', 'msg__note', content.note))
   push(root)
   return bubble
 }

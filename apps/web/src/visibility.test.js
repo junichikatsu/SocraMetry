@@ -71,6 +71,7 @@ const TOGGLED = [
   'view-dashboard', // .view    flex
   'view-history', //   .view    flex
   'btn-send', //       .send    grid
+  'errorlog', //       指定なし（貼ったエラーの固定パネル）
   'mask', //           指定なし
   'error', //          指定なし
   'mock-badge', //     指定なし（span）

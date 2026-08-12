@@ -14,8 +14,9 @@
   ★ textContent のみを使う。innerHTML は lint で禁止している（security.md §7）。
 */
 import { api, ApiError, apiWithRetry } from './api.js'
-import { byId, el } from './dom.js'
+import { byId, clear, el } from './dom.js'
 import { renderHistory, renderStats } from './dashboard.js'
+import { renderErrorLog, summarize } from './error-log.js'
 import { retryLabel } from './format.js'
 import * as maskPreview from './mask-preview.js'
 import { costNodes, reportCard, revealNodes } from './report.js'
@@ -150,6 +151,42 @@ function updateComposer() {
   input.style.height = `${Math.min(input.scrollHeight, 190)}px`
   // 送信前マスキングプレビュー（security.md §3 A）。**貼り付けた瞬間に出す**
   maskPreview.render(input.value)
+}
+
+// ═══ 貼ったエラーの固定表示 ════════════════════════════════════════════════
+
+/**
+ * **スクロールで消えないところに置く。**
+ * この画面は「エラーを正確に読めるか」を測っている（evaluation-model.md の観察軸）。
+ * 先輩役が「スタックトレースをもう一度読み返してください」と言う場面があり、
+ * そのときに対象が画面外にあると成立しない。
+ *
+ * 既定は 3 行ぶんだけ見せる。**畳んでも隠さない**のは、
+ * 完全に隠すと常時表示にした意味（対象を見ながら考える）が無くなるため。
+ */
+function showErrorLog(text) {
+  const panel = byId('errorlog')
+  renderErrorLog(byId('errorlog-body'), text)
+  byId('errorlog-summary').textContent = summarize(text)
+  panel.dataset['open'] = 'false'
+  byId('errorlog-toggle').setAttribute('aria-expanded', 'false')
+  byId('errorlog-toggle').querySelector('.errorlog__action').textContent = '全文'
+  panel.hidden = false
+}
+
+function hideErrorLog() {
+  byId('errorlog').hidden = true
+  clear(byId('errorlog-body'))
+}
+
+function toggleErrorLog() {
+  const panel = byId('errorlog')
+  const open = panel.dataset['open'] !== 'true'
+  panel.dataset['open'] = String(open)
+  byId('errorlog-toggle').setAttribute('aria-expanded', String(open))
+  byId('errorlog-toggle').querySelector('.errorlog__action').textContent = open
+    ? '折りたたむ'
+    : '全文'
 }
 
 // ═══ セッション状態 ════════════════════════════════════════════════════════
@@ -288,7 +325,18 @@ async function startSession() {
     if (value !== '') values[key] = value
   }
 
-  thread.user({ who: state.me?.displayName ?? 'あなた', code: errorText })
+  /**
+   * スレッドには**先頭行だけ**を出す。全文は上の固定パネルに常時出ているので、
+   * ここで同じものを繰り返すと、最初のヒントが画面外に押し出される。
+   */
+  const lines = errorText.split(/\r\n?|\n/).filter((l) => l.trim() !== '')
+  thread.user({
+    who: state.me?.displayName ?? 'あなた',
+    text: 'このエラーで詰まっています。',
+    code: lines[0] ?? errorText,
+    note: `全文（${summarize(errorText)}）は上の「貼ったエラー」に出ています。`,
+  })
+  showErrorLog(errorText)
   input.value = ''
   maskPreview.reset()
   updateComposer()
@@ -523,6 +571,7 @@ function newSession() {
   state.question = null
   state.hints = []
   thread.reset()
+  hideErrorLog()
   renderTopbar()
   setComposerMode('compose')
   selectView('chat')
@@ -679,6 +728,7 @@ byId('nav-chat').addEventListener('click', () => {
   newSession()
 })
 
+byId('errorlog-toggle').addEventListener('click', toggleErrorLog)
 byId('btn-reload-history').addEventListener('click', () => loadHistory().catch(showError))
 
 byId('btn-logout').addEventListener('click', async () => {
