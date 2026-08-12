@@ -532,6 +532,12 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 
 .countdown { margin: 10px 0 0; color: var(--ink-3); font-size: 12px; }
 
+/*
+  Gate C の解放のされ方。`.countdown` と分けているのは、
+  自動遷移の予告を消すときに `.countdown` を一括で消しているため
+*/
+.gate-note { margin: 10px 0 0; color: var(--ink-4); font-size: 12px; }
+
 @media (prefers-reduced-motion: reduce) {
   .thinking__dots span { animation: none; opacity: 0.6; }
 }

@@ -235,8 +235,35 @@ function gateActions() {
   if (a.canReveal) {
     specs.push({ label: '解説を読む', onClick: () => withThinking(null, reveal) })
   }
+
   // 押せるものが 1 つも無いなら、空の枠を置かない
-  return specs.length === 0 ? null : thread.actionBar(specs)
+  const bar = specs.length === 0 ? null : thread.actionBar(specs)
+  const note = revealNote()
+  if (!note) return bar
+
+  const wrap = el('div')
+  if (bar) wrap.appendChild(bar)
+  wrap.appendChild(note)
+  return wrap
+}
+
+/**
+ * Gate B で解説がまだ読めないとき、**どうすれば読めるようになるか**を出す。
+ *
+ * socratic-engine.md §7 の要点 1 は「どのゲートでも『進む』導線を塞がない」と
+ * しているが、Gate B → C の条件（FR-07）に利用者の明示要求は含まれていない。
+ * 条件を満たすまで進めないこと自体は要件どおりなので**変えない。**
+ * 代わりに、黙って何も出さないのをやめる。**何も出ないのは「詰まった」に見える。**
+ *
+ * **Gate A では出さない。** Gate A から Gate C へは意図的に繋いでいない
+ * （繋ぐと 3 ゲートの段階構造が成立しない / `revealGateReason` の `gate_a`）。
+ * ここで「待てば解説が出る」と読める文を出すと、その設計を裏切ることになる。
+ */
+function revealNote() {
+  if (state.session?.gate !== 'B') return null
+  if (state.actions?.canReveal) return null
+  // 文面はサーバの GATE_NOT_UNLOCKED と揃える。同じことを 2 通りに言わない
+  return el('p', 'gate-note', '設問を進めるか、少し時間が経つと解説を読めるようになります。')
 }
 
 // ═══ 時間経過による Gate A → B（#20 / FR-07）══════════════════════════════
