@@ -194,6 +194,9 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .btn--small { padding: 5px 12px; font-size: 12px; }
 .btn--ghost { border-color: var(--line); background: #fff; color: var(--ink-2); }
 .btn--ghost:hover:not(:disabled) { background: var(--bg); }
+/* モックの「追加する」の配色（ブランド紫の塗り） */
+.btn--brand { background: var(--brand); color: #fff; }
+.btn--brand:hover:not(:disabled) { background: var(--brand-ink); }
 .btn--quiet { background: transparent; color: var(--ink-3); }
 
 .alert {

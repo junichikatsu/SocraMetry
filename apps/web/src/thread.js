@@ -160,12 +160,23 @@ export function optionList(options, onPick) {
 
 /**
  * 行動ボタンの並び。
- * @param {{label: string, onClick: () => void, primary?: boolean, disabled?: boolean}[]} specs
+ *
+ * `kind` はモックの配色に合わせるためのもの。
+ * `brand`（紫の塗り）/ `ghost`（白の枠）/ 既定は淡い紫、`primary` はアクセント。
+ *
+ * @param {{label: string, onClick: () => void, primary?: boolean, kind?: 'brand'|'ghost', disabled?: boolean}[]} specs
  */
 export function actionBar(specs) {
   const bar = el('div', 'actions')
   for (const spec of specs) {
-    const b = button(spec.label, spec.primary ? 'btn btn--primary btn--small' : 'btn', spec.onClick)
+    const className = spec.primary
+      ? 'btn btn--primary btn--small'
+      : spec.kind === 'brand'
+        ? 'btn btn--brand'
+        : spec.kind === 'ghost'
+          ? 'btn btn--ghost'
+          : 'btn'
+    const b = button(spec.label, className, spec.onClick)
     b.disabled = Boolean(spec.disabled)
     bar.appendChild(b)
   }

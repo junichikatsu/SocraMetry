@@ -406,15 +406,40 @@ function submitError() {
   })
   showErrorLog(errorText)
   setComposerMode('waiting')
+  askContext()
+}
 
+/**
+ * 「追加しますか？」の確認（PR #33: chat-screen-add-context）。
+ * 配色はモックのまま: 追加する = 紫の塗り / しない = 白の枠。
+ *
+ * セッション作成に失敗したときも、ここを呼び直せば選択からやり直せる
+ * （選択肢のボタンは次のメッセージが積まれた時点で無効化されるため）。
+ */
+function askContext() {
   thread.bot({
     lead: '調査します。確認するコード情報や状況を追加しますか？',
     nodes: [
       thread.actionBar([
-        { label: '追加する', primary: true, onClick: openContextDialog },
-        { label: 'しない', onClick: () => withThinking(null, () => createSessionNow({})) },
+        { label: '追加する', kind: 'brand', onClick: openContextDialog },
+        { label: 'しない', kind: 'ghost', onClick: () => createSessionOrRetry({}) },
       ]),
     ],
+  })
+}
+
+/**
+ * セッション作成。失敗（レート制限など）で選択肢ごと死なないよう、
+ * エラー表示のあとに確認を積み直す。
+ */
+function createSessionOrRetry(extra) {
+  withThinking(null, async () => {
+    try {
+      await createSessionNow(extra)
+    } catch (err) {
+      askContext()
+      throw err
+    }
   })
 }
 
@@ -987,11 +1012,16 @@ onSubmit('form-signup', async (form) => {
   await afterLogin(data.me)
 })
 
+/**
+ * 送信ボタンの活性は setComposerMode が一元管理する。
+ * withThinking にボタンを渡すと finally の再活性化がモードの無効化を
+ * 打ち消してしまう（waiting に入った直後に送信が押せる見た目に戻る）。
+ * 二重送信の防御はサーバの冪等性（api-spec.md §4）。
+ */
 byId('form-compose').addEventListener('submit', (event) => {
   event.preventDefault()
-  const send = /** @type {HTMLButtonElement} */ (byId('btn-send'))
-  if (state.composerMode === 'compose') withThinking(send, async () => submitError())
-  else if (state.composerMode === 'declare') withThinking(send, declareConclusion)
+  if (state.composerMode === 'compose') withThinking(null, async () => submitError())
+  else if (state.composerMode === 'declare') withThinking(null, declareConclusion)
   // waiting / observing / locked では送信自体が無効
 })
 
@@ -1023,7 +1053,7 @@ byId('form-context').addEventListener('submit', (event) => {
   }
   byId('context-dialog').hidden = true
   form.reset()
-  withThinking(null, () => createSessionNow(extra))
+  createSessionOrRetry(extra)
 })
 
 const composerInput = byId('composer-input')
