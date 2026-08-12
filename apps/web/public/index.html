@@ -81,9 +81,15 @@
           <input class="input" name="password" type="password" autocomplete="new-password" required minlength="8" />
           <span class="field__hint">8 文字以上</span>
         </label>
+        <!--
+          ★ placeholder を置かないこと。招待コードに書式の制約は無く
+            （`inviteCode` は 1〜200 文字の任意の文字列で、INVITE_CODE との完全一致）、
+            例を出すと存在しない書式を約束することになる。
+            本物らしく見えるため、そのまま打ち込まれる事故も起きる。
+        -->
         <label class="field">
           <span class="field__label">招待コード<span class="field__aside">※ 組織・イベントから配布されたコード</span></span>
-          <input class="input" name="inviteCode" type="text" required placeholder="SOCRA-DEBUG-TR-2026" />
+          <input class="input" name="inviteCode" type="text" required autocomplete="off" />
         </label>
         <button class="btn btn--primary btn--block" type="submit">登録してはじめる →</button>
       </form>
