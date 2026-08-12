@@ -430,9 +430,22 @@ Set-Cookie: sm_session=<jwt>; HttpOnly; Secure; SameSite=None; Max-Age=86400; Pa
       { "id": "c", "label": "map に渡したコールバック関数" },
       { "id": "d", "label": "map の戻り値" }
     ]
+  },
+  "actions": {
+    "canRequestHint": true,
+    "canAdvanceToQuestions": false,   // ← Gate B に入ったので false
+    "canDeclareConclusion": true,
+    "canReveal": false
   }
 }
 ```
+
+> **`session` を返す応答には必ず `actions` を付ける。**
+> 画面は「どのボタンを出してよいか」を `actions` だけで決めている（§7 の設計判断）。
+> 付け忘れると、クライアントは**1 つ前の状態を出し続ける。**
+> 実際にこのエンドポイントが `actions` を返しておらず、Gate B に入った後も
+> Gate A のボタン（「設問に進む」）が画面に出たままになっていた。
+> 検査は `api.test.ts` の「session を返す応答には必ず actions が付く」。
 
 **注意**: この遷移は**不可逆**。以降 Gate A の評価（`gate_factor` 1.00）は得られない。
 クライアントは実行前に確認ダイアログを出す。

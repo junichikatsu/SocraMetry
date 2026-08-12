@@ -512,7 +512,12 @@ async function buildQuestion(
 export async function advanceToQuestions(
   auth: AuthContext,
   sessionId: string,
-): Promise<{ session: SessionPublic; question: QuestionPublic | null; pending?: PendingPublic }> {
+): Promise<{
+  session: SessionPublic
+  question: QuestionPublic | null
+  actions: SessionActions
+  pending?: PendingPublic
+}> {
   const session = await loadSession(auth, sessionId)
   assertActive(session)
 
@@ -520,7 +525,11 @@ export async function advanceToQuestions(
   if (session.gate === 'B') {
     const existing = pendingQuestion(session)
     if (existing) {
-      return { session: toSessionPublic(session), question: toQuestionPublic(sessionId, existing) }
+      return {
+        session: toSessionPublic(session),
+        question: toQuestionPublic(sessionId, existing),
+        actions: actionsOf(session),
+      }
     }
   } else {
     if (!canAdvanceToQuestions(gateStateOf(session))) throw errors.gateNotUnlocked()
@@ -532,7 +541,9 @@ export async function advanceToQuestions(
   }
 
   const stage = session.currentStage
-  if (!stage) return { session: toSessionPublic(session), question: null }
+  if (!stage) {
+    return { session: toSessionPublic(session), question: null, actions: actionsOf(session) }
+  }
 
   const diagnosis = await loadDiagnosis(session)
   // 診断待ちで 202 を返した後の再送でもここに来る。
@@ -546,6 +557,7 @@ export async function advanceToQuestions(
     return {
       session: toSessionPublic(session),
       question: null,
+      actions: actionsOf(session),
       pending: { reason: 'DIAGNOSIS_IN_PROGRESS', retryAfterMs: 3000 },
     }
   }
@@ -563,6 +575,7 @@ export async function advanceToQuestions(
   return {
     session: toSessionPublic(session),
     question: toQuestionPublic(sessionId, next.turn),
+    actions: actionsOf(session),
   }
 }
 
@@ -979,7 +992,7 @@ export async function retrospect(
   auth: AuthContext,
   sessionId: string,
   req: RetrospectRequest,
-): Promise<{ session: SessionPublic; reportPath: string }> {
+): Promise<{ session: SessionPublic; reportPath: string; actions: SessionActions }> {
   const session = await loadSession(auth, sessionId)
   if (session.gate !== 'C') throw errors.gateNotUnlocked('先に解説を読んでください')
 
@@ -993,7 +1006,11 @@ export async function retrospect(
   session.completedAt = session.completedAt ?? Date.now()
   await sessionRepo.putSession(session)
 
-  return { session: toSessionPublic(session), reportPath: reportPathOf(sessionId) }
+  return {
+    session: toSessionPublic(session),
+    reportPath: reportPathOf(sessionId),
+    actions: actionsOf(session),
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -825,6 +825,50 @@ describe('答えが Gate C 到達前に漏れない（DoD #2）', () => {
  * 会話の記録は `sessions` に全部入っている。それを時系列に並べ直すだけなので、
  * **答えが漏れる新しい経路は作られない**（正解 ID も内部診断も別テーブル / ADR-005）。
  */
+/**
+ * 画面は「どのボタンを出してよいか」を `actions` だけで決めている
+ * （socratic-engine.md §7: 条件式をクライアントに持たせると必ずずれる）。
+ *
+ * **`session` を返す応答に `actions` が無いと、画面は 1 つ前の状態を出し続ける。**
+ * 実際、`advance` が `actions` を返しておらず、Gate B に入った後も
+ * 「設問に進む」（Gate A のボタン）が出たままになっていた。
+ */
+describe('session を返す応答には必ず actions が付く', () => {
+  it('Gate B に入った時点で「設問に進む」は消える', async () => {
+    const cookie = await signIn('actions-advance@example.com')
+    const id = (await startSession(cookie)).session.id
+
+    const advanced = await call('POST', `/v1/sessions/${id}/advance`, { cookie })
+
+    expect(advanced.body.session.gate).toBe('B')
+    expect(advanced.body.actions).toBeDefined()
+    // ★ Gate A のボタン。ここで false にならないと画面に出続ける
+    expect(advanced.body.actions.canAdvanceToQuestions).toBe(false)
+  })
+
+  it('セッションを返すすべての操作が actions を持つ', async () => {
+    const cookie = await signIn('actions-all@example.com')
+    const id = (await startSession(cookie)).session.id
+    await call('POST', `/v1/sessions/${id}/diagnose`, { cookie })
+
+    const responses = [
+      await call('POST', `/v1/sessions/${id}/hints`, { cookie }),
+      await call('GET', `/v1/sessions/${id}`, { cookie }),
+      await call('GET', `/v1/sessions/${id}/transcript`, { cookie }),
+      await call('POST', `/v1/sessions/${id}/advance`, { cookie }),
+      await call('POST', `/v1/sessions/${id}/conclusion`, {
+        cookie,
+        body: { body: 'コネクションのクローズ漏れだと考えます' },
+      }),
+    ]
+
+    for (const res of responses) {
+      if (res.body.session === undefined) continue
+      expect(res.body.actions, JSON.stringify(res.body.session)).toBeDefined()
+    }
+  })
+})
+
 describe('中断したセッションを復旧する', () => {
   /** 保存済みのセッションの時刻を巻き戻し、中断があったことにする */
   function rewind(sessionId: string, byMs: number): void {
