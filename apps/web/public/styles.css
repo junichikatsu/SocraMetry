@@ -210,7 +210,27 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 
 /* ── 本体レイアウト ───────────────────────────────────────────────────── */
 
-.app { display: grid; grid-template-columns: 300px 1fr; height: 100%; }
+/*
+  ★ `grid-template-rows` と `.main` の `min-height` は、**どちらも消さないこと。**
+
+  グリッド項目の既定は `min-height: auto`（= 中身より小さくなれない）。
+  行を指定しないと暗黙の行は `auto` になり、**スレッドが伸びた分だけ .main が
+  画面より高くなる。** body が overflow: hidden なので、下端にある入力欄が
+  画面外に出て触れなくなる（実際にそうなっていた）。
+
+  .thread と .view には min-height: 0 を入れてあるが、それはフレックス側の話で、
+  **グリッド項目である .main には別途必要。** サイドバーが無事だったのは
+  overflow-y: auto を持っており、それが自動最小サイズを 0 にするため。
+
+  minmax(0, 1fr) と min-height: 0 は同じことを両側から言っている。
+  片方でも足りるが、**どちらを消しても壊れる**ことに気づける形にしておく。
+*/
+.app {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  grid-template-rows: minmax(0, 1fr);
+  height: 100%;
+}
 
 .sidebar {
   display: flex;
@@ -268,7 +288,15 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .me__name { font-size: 14px; font-weight: 700; }
 .me__mail { color: var(--ink-3); font-size: 11px; overflow: hidden; text-overflow: ellipsis; }
 
-.main { position: relative; display: flex; flex-direction: column; min-width: 0; background: #fff; }
+/* min-height: 0 の理由は .app のコメント。消すと入力欄が画面外に出る */
+.main {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: #fff;
+}
 
 .topbar {
   display: flex;

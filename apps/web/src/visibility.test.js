@@ -1,6 +1,22 @@
 // @ts-check
 /**
- * 画面の出し分けが**実際に効いているか**を、DOM とスタイルを組んで確かめる。
+ * 型検査にも lint にも出ない、**組み上げないと分からない壊れ方**を押さえる。
+ *
+ * ここまでに 2 件出している。どちらも CSS 1 行が原因で、
+ * どちらもコードを読んでいる限り正しく見えた。
+ *
+ *   1. `hidden` がクラス側の `display` に打ち消され、フォームが同時に出ていた
+ *   2. グリッド項目の `min-height` 不足で、入力欄が画面外に出ていた
+ *
+ * ## このテストで**できないこと**
+ *
+ * jsdom はレイアウトを持たない。高さも位置も計算されないため、
+ * **「入力欄が画面内にあるか」は確かめられない。** 2 のような不具合は
+ * 実ブラウザで見るしかなく、ここでできるのは
+ * 「原因になった規則が消えていないか」を留めることだけ。
+ * その旨は該当の describe に書いてある。
+ *
+ * ## 画面の出し分け
  *
  * この画面はページ遷移を持たず、すべての切替を `hidden` 属性で行っている
  * （ADR-012 / ADR-013）。ところが `hidden` を効かせているのはブラウザ標準の
@@ -99,6 +115,37 @@ describe('ログイン画面のタブ', () => {
     // ログイン側にはそもそも存在しない（隠れているだけ、にしない）
     expect(dom.window.document.querySelector('#form-login [name="inviteCode"]')).toBeNull()
     expect(dom.window.document.querySelector('#form-login [name="displayName"]')).toBeNull()
+  })
+})
+
+/**
+ * ⚠️ **レイアウトそのものは検証できていない**（jsdom に高さの計算がないため）。
+ * ここで留めているのは「入力欄が画面外に出た原因の規則が残っているか」だけ。
+ *
+ * スレッドが伸びると .main が画面より高くなり、下端の入力欄が
+ * body の overflow: hidden に隠れて触れなくなっていた。
+ * グリッド項目の既定が `min-height: auto`（中身より小さくなれない）ためで、
+ * .thread / .view の min-height: 0 はフレックス側の話なので効かない。
+ */
+describe('入力欄が画面外に出ないための規則が残っている', () => {
+  const styleOf = (selector, prop) => {
+    const node = dom.window.document.querySelector(selector)
+    if (!node) throw new Error(`要素がありません: ${selector}`)
+    return dom.window.getComputedStyle(node)[prop]
+  }
+
+  it('.app が行を minmax(0, …) で切っている（暗黙の auto 行だと中身の分だけ伸びる）', () => {
+    expect(styleOf('.app', 'gridTemplateRows')).toContain('minmax(0')
+  })
+
+  it('.main がグリッド項目として中身より小さくなれる', () => {
+    expect(styleOf('.main', 'minHeight')).toBe('0')
+  })
+
+  it('スレッドだけがはみ出しを引き受け、入力欄は縮まない', () => {
+    expect(styleOf('.thread', 'overflowY')).toBe('auto')
+    expect(styleOf('.thread', 'minHeight')).toBe('0')
+    expect(styleOf('.composer', 'flexShrink')).toBe('0')
   })
 })
 
