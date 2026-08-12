@@ -573,28 +573,6 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 
 .msg__bubble .table-wrap { margin-top: 10px; }
 
-/* ── 生レスポンス ─────────────────────────────────────────────────────── */
-
-.wire { flex-shrink: 0; max-height: 42vh; padding: 0 26px 12px; border-top: 1px solid var(--line-soft); overflow-y: auto; }
-.wire__summary { padding: 10px 0; color: var(--ink-3); font-size: 12px; font-weight: 700; }
-.wire__list { margin: 8px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
-.wire__head { color: var(--ink-2); font-family: ui-monospace, "Consolas", monospace; font-size: 11.5px; font-weight: 700; }
-.wire__head--bad { color: var(--danger); }
-.wire__head--wait { color: #b45309; }
-
-.wire__json {
-  margin: 4px 0 0;
-  max-height: 190px;
-  padding: 8px 10px;
-  border-radius: var(--r-sm);
-  background: var(--bg);
-  font-family: ui-monospace, "Consolas", monospace;
-  font-size: 11px;
-  white-space: pre-wrap;
-  word-break: break-all;
-  overflow: auto;
-}
-
 /* F17（レスポンシブ）は Won't / v0.2。PC 前提（scope-v0.1.md §5）。
    下は「狭い窓で完全に壊れない」ための最低限であり、対応の宣言ではない */
 @media (max-width: 1080px) {

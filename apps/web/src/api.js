@@ -2,6 +2,10 @@
 /**
  * API 呼び出し。**呼び出し規約そのもの**なので、画面の作り替えでは触らない層。
  * 暫定画面（PR #13）からそのまま引き継いでいる。
+ *
+ * **応答を溜め込まない。** 暫定画面は生レスポンスの確認パネル用に直近 30 件を
+ * 配列で持っていたが、パネルごと外した。診断結果や利用者の入力を含む本文を
+ * ブラウザのメモリに残し続ける理由がない。通信の確認は devtools のネットワークタブで足りる。
  */
 
 /**
@@ -23,29 +27,11 @@ export class ApiError extends Error {
   }
 }
 
-/** 直近の通信ログ。生レスポンスパネル用。**本文は画面から出さない** */
-export const wire = []
-
-/** @type {null | (() => void)} */
-let onWire = null
-
-/** @param {() => void} fn */
-export function setWireListener(fn) {
-  onWire = fn
-}
-
-function recordWire(entry) {
-  wire.unshift(entry)
-  if (wire.length > 30) wire.pop()
-  onWire?.()
-}
-
 /**
  * `2xx` 以外は例外にする。ただし `202` は**エラーではなく待機**なので
  * 正常系として返す（api-spec.md §3.5）。
  */
 export async function api(method, path, body) {
-  const startedAt = Date.now()
   let res
   try {
     res = await fetch(API_BASE + path, {
@@ -54,7 +40,6 @@ export async function api(method, path, body) {
       body: body === undefined ? undefined : JSON.stringify(body),
     })
   } catch {
-    recordWire({ method, path, status: 0, ms: Date.now() - startedAt, body: '(通信失敗)' })
     throw new ApiError(0, null)
   }
 
@@ -65,14 +50,6 @@ export async function api(method, path, body) {
   } catch {
     parsed = null
   }
-
-  recordWire({
-    method,
-    path,
-    status: res.status,
-    ms: Date.now() - startedAt,
-    body: parsed === null ? text.slice(0, 2000) : JSON.stringify(parsed, null, 2),
-  })
 
   if (!res.ok) throw new ApiError(res.status, parsed)
   return { status: res.status, data: parsed }

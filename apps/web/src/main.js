@@ -13,9 +13,9 @@
 
   ★ textContent のみを使う。innerHTML は lint で禁止している（security.md §7）。
 */
-import { api, ApiError, apiWithRetry, setWireListener, wire } from './api.js'
-import { byId, clear, el } from './dom.js'
-import { renderHistory, renderStats, renderWire } from './dashboard.js'
+import { api, ApiError, apiWithRetry } from './api.js'
+import { byId, el } from './dom.js'
+import { renderHistory, renderStats } from './dashboard.js'
 import * as maskPreview from './mask-preview.js'
 import { costNodes, reportCard, revealNodes } from './report.js'
 import { FRAMEWORKS, LANGUAGES, stageName } from './stages.js'
@@ -611,7 +611,6 @@ function onSubmit(id, handler) {
 fillSelect(byId('select-language'), LANGUAGES)
 fillSelect(byId('select-framework'), FRAMEWORKS)
 maskPreview.setupMaskPreview()
-setWireListener(() => renderWire(wire))
 
 byId('tab-login').addEventListener('click', () => selectTab('login'))
 byId('tab-signup').addEventListener('click', () => selectTab('signup'))
@@ -671,10 +670,6 @@ byId('nav-chat').addEventListener('click', () => {
 })
 
 byId('btn-reload-history').addEventListener('click', () => loadHistory().catch(showError))
-byId('btn-clear-wire').addEventListener('click', () => {
-  wire.length = 0
-  clear(byId('wire-list'))
-})
 
 byId('btn-logout').addEventListener('click', async () => {
   try {

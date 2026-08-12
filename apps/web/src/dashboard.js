@@ -6,7 +6,7 @@
  * v0.1 の API はセッション単位の記録までしか返さず（組織・チームの概念が無い）、
  * ダミーで埋めると「動いている」と誤読される。v0.2 の項目として名前だけ残す。
  */
-import { byId, clear, el, row } from './dom.js'
+import { byId, clear, row } from './dom.js'
 import { renderLegend, renderRadar } from './radar.js'
 import { GATE_LABEL, STAGES, stageName } from './stages.js'
 import { isReferenceOnly } from './report.js'
@@ -87,20 +87,5 @@ export function renderHistory(sessions) {
         new Date(s.startedAt).toLocaleString('ja-JP'),
       ]),
     )
-  }
-}
-
-/** 生レスポンスパネル。デモと異常系の確認に使う（既定は閉じている） */
-export function renderWire(entries) {
-  const list = byId('wire-list')
-  clear(list)
-  for (const entry of entries) {
-    const li = el('li')
-    const head = el('div', 'wire__head', `${entry.status} ${entry.method} ${entry.path} — ${entry.ms}ms`)
-    if (entry.status >= 400 || entry.status === 0) head.classList.add('wire__head--bad')
-    if (entry.status === 202) head.classList.add('wire__head--wait')
-    li.appendChild(head)
-    li.appendChild(el('pre', 'wire__json', entry.body))
-    list.appendChild(li)
   }
 }
