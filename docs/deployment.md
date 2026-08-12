@@ -23,12 +23,25 @@
 
 ### 環境
 
-**v0.1 は development の 1 プロジェクトのみ**（F19 Won't）。
+**enebular プロジェクトは 1 つ。その中にクラウド実行環境を 2 つ**持つ（F19 Won't）。
+プロジェクトを分けないので `ENEBULAR_PROJECT_ID` は共通で、
+実行環境とファイルアセットだけが環境ごとに異なる。
+
+| GitHub Environment | 用途 | トリガー URL | 状態 |
+|---|---|---|---|
+| `staging` | **通しの動作確認・デモ** | `.../socrametry-stg` | 設定済み |
+| `development` | 開発中の動作確認 | `.../socrametry` | 設定済み |
+| `production` | 本番 | — | **未作成**（v0.2。Required reviewers を付けて承認制にする） |
+
+> **`production` を選ぶとワークフローは設定不足で止まる。**
+> Environment が無いため Secrets も Variables も空になり、
+> 「Validate credentials and settings」で明示的に失敗する。
+> ZIP のデプロイまで進んでから壊れることはない。
 
 | ブランチ / イベント | デプロイ先 | 版 | 状態 |
 |---|---|---|---|
-| 手動実行 (`workflow_dispatch`) | 選択した Environment | v0.1 | ✅ **これだけが有効** |
-| `main` への push | development | v0.2 以降 | ⬜ ワークフロー内でコメントアウト |
+| 手動実行 (`workflow_dispatch`) | 選択した Environment（既定 `staging`） | v0.1 | ✅ **これだけが有効** |
+| `develop` への push | staging | v0.2 以降 | ⬜ ワークフロー内でコメントアウト |
 | `v*` タグの push | production | v0.2 以降 | ⬜ 同上 |
 
 > **v0.1 は手動実行のみに絞っている。** フロントエンドが暫定のため、
@@ -175,11 +188,16 @@ CLI は既存のアセットと実行環境に対して動くため、**最初�
 
 | # | 作業 | 取得する ID |
 |---|---|---|
-| 1 | プロジェクトを **1 つ**作成（development 相当）※ production は v0.2（F19 Won't） | `PROJECT_ID` |
+| 1 | プロジェクトを **1 つ**作成 ※ production は v0.2（F19 Won't） | `PROJECT_ID` |
 | 2 | データストアのテーブルを **5 つ**作成（§3.1） | テーブル ID × 5 |
 | 3 | ZIP をファイルアセットとして登録（`--deploy-type cloud --handler index.handler`） | `ASSET_ID` |
 | 4 | ZIP 向けクラウド実行環境を作成（ランタイム Node.js 22.x） | `CLOUD_ID` |
 | 5 | HTTP トリガーを有効化しパスを設定（インスタンス内で一意） | トリガー URL |
+
+> **3〜5 は環境の数だけ繰り返す。** staging と development で
+> ファイルアセットとクラウド実行環境を分けているため（プロジェクトは共通）。
+> **トリガーのパスも変える**（`socrametry` / `socrametry-stg`）。
+> フロントは相対パスで API を呼ぶので（ADR-012）、パスが違っても画面側の設定は要らない。
 | 6 | `connectDataStore` を有効化し、環境変数を設定 | — |
 | 7 | アクセスキー / シークレットキーを発行 | `ENEBULAR_ACCESS_KEY` / `ENEBULAR_SECRET_KEY` |
 
@@ -270,7 +288,9 @@ OrcaRouter のキーが GitHub 側に一切存在しない状態を保てる。
 | `ENEBULAR_FILE_ASSET_ID` | ZIP のファイルアセット ID |
 
 GitHub Environments を作り、環境ごとにこの 3 つを設定する。
-**v0.1 は `development` のみ**（enebular プロジェクトが 1 つのため）。
+**v0.1 は `staging` と `development` の 2 つ**。enebular プロジェクトは 1 つなので
+`ENEBULAR_PROJECT_ID` は両者で同じ値になり、`ENEBULAR_CLOUD_ID` と
+`ENEBULAR_FILE_ASSET_ID` だけが分かれる。
 `production` は v0.2 で追加し、Required reviewers を付けて承認制にする。
 
 このほか、デプロイ後の疎通確認に `HTTP_TRIGGER_URL`（トリガー URL）を設定できる。
