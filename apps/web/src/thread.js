@@ -24,9 +24,25 @@ export function reset() {
   clear(thread())
 }
 
-function scrollToEnd() {
+/**
+ * 新しく積んだメッセージが**読み始められる位置**にくるようにする。
+ *
+ * 常に末尾へ飛ばしていたが、それだと画面より高いメッセージ（Gate C の解説など）は
+ * **本文の途中から表示される。** 読み始めの位置を自分で探すことになり、
+ * 上に何が書いてあったかも分からない。
+ *
+ * 収まる高さなら末尾へ寄せる方が自然なので、高さで振り分ける。
+ *
+ * @param {HTMLElement} root 積んだメッセージ
+ */
+function scrollToNew(root) {
   const node = thread()
-  node.scrollTop = node.scrollHeight
+  if (root.offsetHeight < node.clientHeight) {
+    node.scrollTop = node.scrollHeight
+    return
+  }
+  // 上端にぴったり付けず、少しだけ余白を残す
+  node.scrollTop = Math.max(0, root.offsetTop - node.offsetTop - 12)
 }
 
 /**
@@ -61,7 +77,7 @@ function push(root) {
     /** @type {HTMLButtonElement} */ (stale).disabled = true
   }
   node.appendChild(root)
-  scrollToEnd()
+  scrollToNew(root)
   return root
 }
 

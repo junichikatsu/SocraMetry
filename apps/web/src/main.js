@@ -506,12 +506,35 @@ async function reveal() {
   applySession(data)
   renderTopbar()
 
-  thread.bot({ lead: 'ここまでの経過をふまえて、原因をお伝えします。', nodes: revealNodes(data.reveal) })
-
+  /**
+   * **振り返りを同時に出さない。**
+   *
+   * 続けて積むと、その分だけスレッドが流れて解説が画面外に出る。
+   * Gate C は「答えが得られない状態を作らない」ために存在するゲートなので
+   * （socratic-engine.md の P2 / FR-08）、**その解説を読み飛ばさせたら本末転倒**になる。
+   * 読み終えたことを利用者に宣言させてから次へ進む。
+   */
   thread.bot({
-    callout: { label: '振り返り', body: data.retrospection.question, calm: true },
+    lead: 'ここまでの経過をふまえて、原因をお伝えします。',
     nodes: [
-      thread.optionList(data.retrospection.options, (id) => {
+      ...revealNodes(data.reveal),
+      thread.actionBar([
+        {
+          label: '読み終えました。振り返りに進む',
+          primary: true,
+          onClick: () => showRetrospection(data.retrospection),
+        },
+      ]),
+    ],
+  })
+}
+
+function showRetrospection(retrospection) {
+  thread.bot({
+    texts: ['最後に 1 問だけ。今回の経験を次に活かすための確認です。'],
+    callout: { label: '振り返り', body: retrospection.question, calm: true },
+    nodes: [
+      thread.optionList(retrospection.options, (id) => {
         withThinking(null, () => retrospect(id))
       }),
     ],
@@ -531,27 +554,36 @@ async function loadReport() {
   setComposerMode('locked')
 
   const { data } = await api('GET', `/v1/sessions/${state.session.id}/report`)
-  const bubble = thread.bot({ lead: 'セッションの結果です。', nodes: reportCard(data) })
+
+  /**
+   * **結果は 1 通にまとめる。** 解説と同じ理由で、続けて積むとその分だけ
+   * スレッドが流れ、いちばん長い結果カード（レーダー・内訳・算出根拠）が
+   * 画面外に出る。次のセッションへの導線もこの中に入れる。
+   */
+  const bubble = thread.bot({
+    lead: 'セッションの結果です。',
+    nodes: [
+      ...reportCard(data),
+      thread.actionBar([
+        { label: '新しいセッションを始める', primary: true, onClick: newSession },
+      ]),
+    ],
+  })
   renderTopbar()
 
-  // コストと集計は本体ではないので、失敗してもレポートの表示を止めない
+  // コストと集計は本体ではないので、失敗してもレポートの表示を止めない。
+  // **後から届くので、行動ボタンより前に差し込む**（末尾に足すと導線が下にずれる）
   api('GET', `/v1/sessions/${state.session.id}/cost`)
     .then((res) => {
       const box = el('details', 'card')
-      const summary = el('summary', 'card__title', 'この 1 セッションの実測コスト')
-      box.appendChild(summary)
+      box.appendChild(el('summary', 'card__title', 'この 1 セッションの実測コスト'))
       for (const node of costNodes(res.data)) box.appendChild(node)
-      bubble.appendChild(box)
+      bubble.insertBefore(box, bubble.querySelector('.actions'))
     })
     .catch(() => {})
 
   loadStats().catch(() => {})
   loadHistory().catch(() => {})
-
-  thread.bot({
-    texts: ['お疲れさまでした。次のエラーに進めます。'],
-    nodes: [thread.actionBar([{ label: '新しいセッションを始める', primary: true, onClick: newSession }])],
-  })
 }
 
 async function loadHistory() {
