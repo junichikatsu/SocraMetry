@@ -1,5 +1,5 @@
 import type { Gate, SessionActions, SessionStatus } from '@socrametry/shared'
-import { canRequestHint } from './hint-policy'
+import { canRequestHint, MAX_HINT_LEVEL } from './hint-policy'
 
 /**
  * ゲート遷移（FR-07 / socratic-engine.md §7）。
@@ -54,19 +54,34 @@ export function canAdvanceToQuestions(state: GateState): boolean {
 }
 
 /**
- * 時間経過による Gate A → B。
+ * 時間経過による Gate A → B が発火する**時刻**。発火しない状態なら null。
  *
  * 条件は「ヒント Lv3 まで開放**かつ**一定時間経過」。時間だけを条件にすると、
  * ヒントを読んでいる最中に勝手に設問へ送られる。
+ *
+ * **この関数があるのはクライアントに渡す値を作るため。**
+ * Lambda は定期実行を持てないので、タイマーの置き場所はクライアントしかない（#20）。
+ * そのとき渡すのは**「いつ」だけ**にする。条件式そのものを渡すと、
+ * ゲート遷移規則（socratic-engine.md §7）がサーバとクライアントに分かれて必ずずれる。
+ */
+export function autoAdvanceAt(state: GateState, timeouts: GateTimeouts): number | null {
+  if (!canAdvanceToQuestions(state)) return null
+  if (state.hintLevel < MAX_HINT_LEVEL) return null
+  return state.gateEnteredAt.A + timeouts.gateAMs
+}
+
+/**
+ * 時間経過による Gate A → B。
+ *
+ * 判定は `autoAdvanceAt` に寄せてある。**条件を 2 箇所に書かない。**
  */
 export function shouldAutoAdvanceToQuestions(
   state: GateState,
   now: number,
   timeouts: GateTimeouts,
 ): boolean {
-  if (!canAdvanceToQuestions(state)) return false
-  if (state.hintLevel < 3) return false
-  return now - state.gateEnteredAt.A >= timeouts.gateAMs
+  const at = autoAdvanceAt(state, timeouts)
+  return at !== null && now >= at
 }
 
 export type RevealGateReason =

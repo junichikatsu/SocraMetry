@@ -1,6 +1,7 @@
 import { MOCK_DIAGNOSIS } from '@socrametry/llm'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { app } from './app'
+import { gateTimeouts } from './config'
 import { installFakeDataStore, uninstallFakeDataStore, type FakeDataStore } from './test-support/fake-datastore'
 
 /**
@@ -290,6 +291,40 @@ describe('Gate A — ヒントのみ（FR-03）', () => {
     await call('POST', `/v1/sessions/${id}/diagnose`, { cookie })
     const lv2 = await call('POST', `/v1/sessions/${id}/hints`, { cookie })
     expect(lv2.body.hint.body).toBe(MOCK_DIAGNOSIS.gateAHints[1])
+  })
+
+  /**
+   * 時間経過による Gate A → B（FR-07 / #20）。
+   * Lambda は定期実行を持てないため、タイマーはクライアントに置く。
+   * サーバが渡すのは**残り時間だけ**で、発火条件はサーバ側にある。
+   */
+  it('ヒントを Lv3 まで開放すると、自動遷移までの残り時間が返る', async () => {
+    const cookie = await signIn()
+    const session = await startSession(cookie)
+    const id = session.session.id
+
+    // Lv3 に達するまでは発火しない（ヒントを読んでいる最中に送られない）
+    expect(session.session.autoAdvanceInMs).toBeNull()
+    const lv2 = await call('POST', `/v1/sessions/${id}/hints`, { cookie })
+    expect(lv2.body.session.autoAdvanceInMs).toBeNull()
+
+    const lv3 = await call('POST', `/v1/sessions/${id}/hints`, { cookie })
+    expect(lv3.body.session.autoAdvanceInMs).toBeGreaterThan(0)
+    // 絶対時刻ではなく残り時間。クライアントの時計とのずれを持ち込まない
+    expect(lv3.body.session.autoAdvanceInMs).toBeLessThanOrEqual(gateTimeouts().gateAMs)
+  })
+
+  it('Gate B に入った後は自動遷移の残り時間を返さない', async () => {
+    const cookie = await signIn()
+    const session = await startSession(cookie)
+    const id = session.session.id
+
+    await call('POST', `/v1/sessions/${id}/hints`, { cookie })
+    await call('POST', `/v1/sessions/${id}/hints`, { cookie })
+    const advanced = await call('POST', `/v1/sessions/${id}/advance`, { cookie })
+
+    expect(advanced.body.session.gate).toBe('B')
+    expect(advanced.body.session.autoAdvanceInMs).toBeNull()
   })
 })
 

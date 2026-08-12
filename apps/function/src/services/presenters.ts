@@ -1,7 +1,8 @@
 import type { SessionItem, TurnItem } from '@socrametry/datastore'
 import type { GateState } from '@socrametry/core'
-import { indexOfStage } from '@socrametry/core'
+import { autoAdvanceAt, indexOfStage } from '@socrametry/core'
 import type { QuestionPublic, SessionPublic, SessionSummaryPublic } from '@socrametry/shared'
+import { gateTimeouts } from '../config'
 
 /**
  * データストアのアイテムを公開型に写す層。
@@ -23,7 +24,8 @@ export function parseQuestionId(questionId: string): { sessionId: string; seq: n
   return { sessionId, seq }
 }
 
-export function toSessionPublic(session: SessionItem): SessionPublic {
+export function toSessionPublic(session: SessionItem, now: number = Date.now()): SessionPublic {
+  const advanceAt = autoAdvanceAt(gateStateOf(session), gateTimeouts())
   return {
     id: session.sessionId,
     mode: session.mode,
@@ -36,6 +38,8 @@ export function toSessionPublic(session: SessionItem): SessionPublic {
     diagnosisStatus: session.diagnosisStatus,
     reachedGate: session.reachedGate,
     startedAt: session.startedAt,
+    // 残り時間に直してから渡す。クライアントの時計とのずれを持ち込まない
+    autoAdvanceInMs: advanceAt === null ? null : Math.max(0, advanceAt - now),
   }
 }
 

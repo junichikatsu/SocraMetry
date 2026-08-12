@@ -50,6 +50,16 @@ export type SessionPublic = {
   /** 解決したゲート。未解決なら null */
   reachedGate: Gate | null
   startedAt: number
+  /**
+   * 時間経過による Gate A → B（FR-07 / #20）まで**あと何ミリ秒か**。
+   * 発火条件を満たしていなければ null。
+   *
+   * **絶対時刻ではなく残り時間を渡す。** クライアントの時計はサーバとずれる。
+   * 判定条件そのものはサーバ（`core` の `autoAdvanceAt`）にあり、
+   * クライアントが持つのはタイマーだけ。Lambda が定期実行を持てないため、
+   * タイマーの置き場所がクライアントしかないという事情だけの分担。
+   */
+  autoAdvanceInMs: number | null
 }
 
 /**

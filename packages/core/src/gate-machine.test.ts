@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  autoAdvanceAt,
   canAdvanceToQuestions,
   canReveal,
   computeActions,
@@ -46,6 +47,41 @@ describe('Gate A → B', () => {
     expect(shouldAutoAdvanceToQuestions(state({ hintLevel: 3 }), late, DEFAULT_GATE_TIMEOUTS)).toBe(
       true,
     )
+  })
+
+  /**
+   * クライアントにタイマーを置くための値（#20）。**条件はサーバに残す**ため、
+   * 渡すのは「いつ」だけ。ここが null なら、クライアントはタイマーを張らない。
+   */
+  describe('autoAdvanceAt — クライアントに渡す発火時刻', () => {
+    it('ヒントが Lv3 に達していなければ発火しない', () => {
+      expect(autoAdvanceAt(state({ hintLevel: 2 }), DEFAULT_GATE_TIMEOUTS)).toBeNull()
+    })
+
+    it('Lv3 まで開放していれば、Gate A に入った時刻 + 待ち時間を返す', () => {
+      expect(autoAdvanceAt(state({ hintLevel: 3 }), DEFAULT_GATE_TIMEOUTS)).toBe(
+        T0 + DEFAULT_GATE_TIMEOUTS.gateAMs,
+      )
+    })
+
+    it('Gate B に入った後・完了後は発火しない', () => {
+      expect(autoAdvanceAt(state({ gate: 'B', hintLevel: 3 }), DEFAULT_GATE_TIMEOUTS)).toBeNull()
+      expect(
+        autoAdvanceAt(state({ status: 'completed', hintLevel: 3 }), DEFAULT_GATE_TIMEOUTS),
+      ).toBeNull()
+    })
+
+    it('shouldAutoAdvanceToQuestions と食い違わない（条件を 2 箇所に書かない）', () => {
+      for (const hintLevel of [0, 1, 2, 3]) {
+        for (const offset of [0, DEFAULT_GATE_TIMEOUTS.gateAMs]) {
+          const s = state({ hintLevel })
+          const at = autoAdvanceAt(s, DEFAULT_GATE_TIMEOUTS)
+          expect(shouldAutoAdvanceToQuestions(s, T0 + offset, DEFAULT_GATE_TIMEOUTS)).toBe(
+            at !== null && T0 + offset >= at,
+          )
+        }
+      }
+    })
   })
 })
 
