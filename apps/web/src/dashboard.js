@@ -28,12 +28,32 @@ export function renderStats(stats) {
    */
   const g = stats.gateDistribution
   const hasCompleted = g.A + g.B + g.C > 0
+
+  /**
+   * 自力解決率（Gate A + B）。evaluation-model.md §2.2 の主要指標。
+   *
+   * **分母は完了セッションのみ。** 未完了には「途中離脱」だけでなく
+   * 「ヒントだけで解決してツールに戻らなかった人」（UC-02 = 最良の結末）も
+   * 混ざっており、v0.1 では両者を区別できない。混ぜると自力解決率が歪む。
+   *
+   * その事実を隠さないため、**分母が何件かを併記する。**
+   * 「説明できない数値を評価に使わせない」（NFR-F1）は、
+   * 数値が何を数えたものかを言えることでもある。
+   */
+  byId('stat-self').textContent = hasCompleted ? `${percent(stats.selfReachRate)}%` : '—'
+  byId('stat-self-sub').textContent = hasCompleted
+    ? `Gate A + B。完了 ${stats.sessionCount} 件から算出`
+    : '完了したセッションがありません'
+
   byId('stat-gates').textContent = hasCompleted
     ? `${percent(g.A)} / ${percent(g.B)} / ${percent(g.C)}`
     : '—'
-  byId('stat-gates-sub').textContent = hasCompleted
-    ? `Gate A / B / C（%）— 未解決 ${percent(g.unresolved)}%`
-    : '完了したセッションがありません'
+  // 未解決は 0 のときに書かない。常に「未解決 0%」と出ていると読み飛ばされる
+  byId('stat-gates-sub').textContent = !hasCompleted
+    ? '完了したセッションがありません'
+    : g.unresolved > 0
+      ? `Gate A / B / C（%）— 未解決 ${percent(g.unresolved)}%`
+      : 'Gate A / B / C（%）'
 
   byId('stat-avg').textContent = stats.correctRate === null ? '—' : `${percent(stats.correctRate)}%`
   byId('stat-avg-sub').textContent =

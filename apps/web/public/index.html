@@ -218,6 +218,8 @@
 
       <div class="tiles">
         <div class="tile"><span class="tile__label">セッション数</span><strong id="stat-sessions" class="tile__value">—</strong><span id="stat-sessions-sub" class="tile__sub"></span></div>
+        <!-- Gate A + B の割合。分母は完了セッションのみ（evaluation-model.md §2.2）-->
+        <div class="tile"><span class="tile__label">自力解決率</span><strong id="stat-self" class="tile__value">—</strong><span id="stat-self-sub" class="tile__sub"></span></div>
         <!-- 3 つ並ぶので、1 つの数字を出す他のタイルより小さめの字にする -->
         <div class="tile"><span class="tile__label">到達内訳</span><strong id="stat-gates" class="tile__value tile__value--triple">—</strong><span id="stat-gates-sub" class="tile__sub">Gate A / B / C</span></div>
         <!-- 中身は correctRate（設問の正答率）。スコアではないのでそう呼ばない -->
