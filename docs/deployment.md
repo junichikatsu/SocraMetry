@@ -67,11 +67,19 @@ apps/function/
 ├── zip-package.json      →  コピー   →  build/package.json
 └── build.mjs                            build/  →  socrametry-function.zip
 
-apps/web/public/
-├── index.html            ┐
-├── styles.css            ├→ esbuild が文字列として index.js に取り込む (ADR-012)
-└── app.js                ┘
+apps/web/
+├── src/**.js             →  esbuild  →  public/app.js  (ADR-013)
+└── public/
+    ├── index.html        ┐
+    ├── styles.css        ├→ esbuild が文字列として index.js に取り込む (ADR-012)
+    └── app.js            ┘
 ```
+
+> **`build.mjs` は最初に `apps/web` をビルドする。**
+> `public/app.js` は生成物で git 管理していないため、ここで作らずに読むと
+> 古い（または存在しない）ファイルが ZIP に入る。CI もデプロイも
+> `pnpm --filter @socrametry/function build:zip` を直接呼ぶ（turbo を経由しない）ので、
+> 依存関係ではなくスクリプトの中から明示的に呼んでいる。
 
 > **静的ファイルは別途 ZIP に入れず、バンドルに文字列として含める。**
 > Lambda のファイルシステム読み込みが不要になり、

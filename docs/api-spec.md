@@ -300,7 +300,8 @@ Set-Cookie: sm_session=<jwt>; HttpOnly; Secure; SameSite=None; Max-Age=86400; Pa
     "gate": "A",
     "hintLevel": 1,
     "diagnosisStatus": "pending",     // ← クライアントはこれを見て diagnose を撃つ
-    "startedAt": 1786000000000
+    "startedAt": 1786000000000,
+    "autoAdvanceInMs": null           // ← 時間経過による Gate A → B までの残り時間
   },
   "hint": {
     "level": 1,
@@ -317,6 +318,23 @@ Set-Cookie: sm_session=<jwt>; HttpOnly; Secure; SameSite=None; Max-Age=86400; Pa
 
 > **設問は返さない。** Gate A は着眼点のヒントのみ。
 > ここで解決できたセッションが最上位評価（`gate_factor` 1.00）になる。
+
+**`autoAdvanceInMs` について**（FR-07 の時間経過による Gate A → B）
+
+`session` を返すすべての応答に載る。**時間経過で設問へ移るまでの残りミリ秒**で、
+条件を満たしていなければ `null`。
+
+| なぜこの形か | |
+|---|---|
+| **クライアントにタイマーを置くため** | 実行環境が Lambda であり、定期実行を持てない。タイマーの置き場所がクライアントしかない |
+| **条件ではなく「いつ」だけを渡す** | 発火条件（ヒント Lv3 開放 かつ 一定時間経過）はサーバの `core` にある。条件式を渡すと遷移規則が 2 箇所に分かれて必ずずれる |
+| **絶対時刻ではなく残り時間** | クライアントの時計はサーバとずれる。残り時間なら時計のずれが乗らない |
+
+クライアント側の責務は 2 つだけ。
+
+1. `autoAdvanceInMs` 経過後に `POST /advance` を撃つ
+2. **利用者が入力中は適用しない**（socratic-engine.md §7 の判断 3）。
+   これもサーバからは観測できないため、クライアントにしか置けない
 
 **処理フロー**
 

@@ -213,10 +213,17 @@ cd SocraMetry
 pnpm install
 
 cp .env.example .env      # MOCK_MODE=true が既定
+
+pnpm dev:web              # フロントのバンドル（監視ビルド。別ターミナルで）
 pnpm dev                  # http://localhost:8787
 ```
 
 これで画面と `GET /v1/health` は開きます。
+
+> **`pnpm dev:web` を先に一度は流してください。**
+> `apps/web/public/app.js` は `apps/web/src/` からの生成物で、git 管理していません
+> （[ADR-013](docs/architecture.md#adr-013-フロントエンドをフレームワークなしで書くバンドラのみ入れる)）。
+> デプロイ用の `build:zip` は内部で自動的にビルドするため、この手順はローカル開発だけの話です。
 
 ### ⚠️ ローカルだけでは 3 ゲートを通せません
 
