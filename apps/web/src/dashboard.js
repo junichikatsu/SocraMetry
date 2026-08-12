@@ -7,6 +7,7 @@
  * ダミーで埋めると「動いている」と誤読される。v0.2 の項目として名前だけ残す。
  */
 import { button, byId, clear, el, row } from './dom.js'
+import { percent } from './format.js'
 import { renderLegend, renderRadar } from './radar.js'
 import { GATE_LABEL, STAGES, stageName } from './stages.js'
 import { isReferenceOnly } from './report.js'
@@ -18,11 +19,23 @@ export function renderStats(stats) {
   byId('stat-sessions-sub').textContent =
     stats.sessionCount === 0 ? 'まだ記録がありません' : `累計 ${hours.toFixed(1)} 時間`
 
+  /**
+   * `gateDistribution` は**件数ではなく比率**（`n / 完了セッション数`）。
+   * そのまま出すと 3 セッション中 1 件で `0.3333333333333333` になる。
+   *
+   * 小数点以下 1 桁で丸める。**セッション数が少ない段階でそれ以上の桁は意味を持たない**
+   * （evaluation-model.md §3.5: そもそも横比較に耐えない）。
+   */
   const g = stats.gateDistribution
-  byId('stat-gates').textContent = `${g.A} / ${g.B} / ${g.C}`
+  const hasCompleted = g.A + g.B + g.C > 0
+  byId('stat-gates').textContent = hasCompleted
+    ? `${percent(g.A)} / ${percent(g.B)} / ${percent(g.C)}`
+    : '—'
+  byId('stat-gates-sub').textContent = hasCompleted
+    ? `Gate A / B / C（%）— 未解決 ${percent(g.unresolved)}%`
+    : '完了したセッションがありません'
 
-  byId('stat-avg').textContent =
-    stats.correctRate === null ? '—' : `${Math.round(stats.correctRate * 100)}%`
+  byId('stat-avg').textContent = stats.correctRate === null ? '—' : `${percent(stats.correctRate)}%`
   byId('stat-avg-sub').textContent =
     stats.correctRate === null ? '設問に進んだ記録がありません' : '設問の正答率'
 

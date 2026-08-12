@@ -635,6 +635,8 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 }
 .tile__label { color: var(--ink-3); font-size: 12px; font-weight: 600; }
 .tile__value { font-size: 28px; font-weight: 800; letter-spacing: -0.02em; }
+/* 3 つ並ぶタイル。28px のままだと枠から溢れる */
+.tile__value--triple { font-size: 20px; }
 .tile__sub { color: var(--ink-4); font-size: 11px; }
 
 .cards { display: grid; grid-template-columns: minmax(320px, 420px) 1fr; gap: 14px; align-items: start; }

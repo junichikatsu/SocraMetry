@@ -5,6 +5,24 @@
  */
 
 /**
+ * 比率（0〜1）を百分率の文字列にする。**小数点以下 1 桁で丸める。**
+ *
+ * 丸めないと 3 件中 1 件が `33.33333333333333` になる。
+ * 桁を増やしても意味は増えない。セッション数が少ない段階では、
+ * そもそも横比較に耐えない値である（evaluation-model.md §3.5）。
+ *
+ * 整数になるものは小数点を出さない（`100.0` ではなく `100`）。
+ *
+ * @param {number|null|undefined} value 0〜1 の比率
+ * @returns {string} `%` は付けない。単位の置き方は呼び出し側で決める
+ */
+export function percent(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '—'
+  const rounded = Math.round(value * 1000) / 10
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)
+}
+
+/**
  * 待ち時間の案内。`Retry-After`（秒）から作る。
  *
  * **秒まで出さない。** 「あと 1382 秒」と言われても待つか諦めるかの判断は変わらず、

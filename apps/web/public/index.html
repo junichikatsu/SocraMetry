@@ -218,8 +218,10 @@
 
       <div class="tiles">
         <div class="tile"><span class="tile__label">セッション数</span><strong id="stat-sessions" class="tile__value">—</strong><span id="stat-sessions-sub" class="tile__sub"></span></div>
-        <div class="tile"><span class="tile__label">到達内訳</span><strong id="stat-gates" class="tile__value">—</strong><span class="tile__sub">Gate A / B / C</span></div>
-        <div class="tile"><span class="tile__label">平均スコア</span><strong id="stat-avg" class="tile__value">—</strong><span id="stat-avg-sub" class="tile__sub"></span></div>
+        <!-- 3 つ並ぶので、1 つの数字を出す他のタイルより小さめの字にする -->
+        <div class="tile"><span class="tile__label">到達内訳</span><strong id="stat-gates" class="tile__value tile__value--triple">—</strong><span id="stat-gates-sub" class="tile__sub">Gate A / B / C</span></div>
+        <!-- 中身は correctRate（設問の正答率）。スコアではないのでそう呼ばない -->
+        <div class="tile"><span class="tile__label">設問の正答率</span><strong id="stat-avg" class="tile__value">—</strong><span id="stat-avg-sub" class="tile__sub"></span></div>
         <div class="tile"><span class="tile__label">直近スコア</span><strong id="stat-last" class="tile__value">—</strong><span id="stat-last-sub" class="tile__sub"></span></div>
       </div>
 

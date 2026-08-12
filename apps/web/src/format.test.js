@@ -1,6 +1,28 @@
 // @ts-check
 import { describe, expect, it } from 'vitest'
-import { retryLabel } from './format.js'
+import { percent, retryLabel } from './format.js'
+
+describe('percent — 比率を百分率に', () => {
+  /** そのまま出すと 3 件中 1 件が 33.33333333333333 になっていた */
+  it('小数点以下 1 桁で丸める', () => {
+    expect(percent(1 / 3)).toBe('33.3')
+    expect(percent(2 / 3)).toBe('66.7')
+    expect(percent(1 / 7)).toBe('14.3')
+  })
+
+  it('整数になるものは小数点を出さない', () => {
+    expect(percent(0)).toBe('0')
+    expect(percent(1)).toBe('100')
+    expect(percent(0.5)).toBe('50')
+    expect(percent(0.25)).toBe('25')
+  })
+
+  it('値が無ければダッシュを返す', () => {
+    for (const input of [null, undefined, NaN, Infinity, '0.5']) {
+      expect(percent(/** @type {never} */ (input)), String(input)).toBe('—')
+    }
+  })
+})
 
 describe('retryLabel — 429 の待ち時間', () => {
   it('分に切り上げる（切り捨てると、その時刻に試してまだ弾かれる）', () => {
