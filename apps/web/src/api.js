@@ -18,13 +18,25 @@ const API_BASE = location.pathname.endsWith('/')
   : location.pathname
 
 export class ApiError extends Error {
-  constructor(status, body) {
+  constructor(status, body, retryAfterSec = null) {
     const error = body && body.error ? body.error : null
     super((error && error.message) || `通信に失敗しました (HTTP ${status})`)
     this.status = status
     this.code = (error && error.code) || 'NETWORK_ERROR'
     this.detail = error ? error.detail : null
+    /**
+     * `429` のときの待ち時間（秒）。サーバが `Retry-After` に入れている。
+     * **同一オリジン配信（ADR-012）だから読める。** 別ホストに置いていたら
+     * CORS の既定でヘッダが見えず、`Access-Control-Expose-Headers` が要る。
+     */
+    this.retryAfterSec = retryAfterSec
   }
+}
+
+/** `Retry-After`（秒）。無い・数値でない・0 以下なら null */
+function retryAfterOf(res) {
+  const raw = Number(res.headers.get('retry-after'))
+  return Number.isFinite(raw) && raw > 0 ? raw : null
 }
 
 /**
@@ -51,7 +63,7 @@ export async function api(method, path, body) {
     parsed = null
   }
 
-  if (!res.ok) throw new ApiError(res.status, parsed)
+  if (!res.ok) throw new ApiError(res.status, parsed, retryAfterOf(res))
   return { status: res.status, data: parsed }
 }
 

@@ -57,7 +57,7 @@ async function call(
   method: string,
   path: string,
   options: { body?: unknown; cookie?: string } = {},
-): Promise<{ status: number; body: Json; cookie: string | null }> {
+): Promise<{ status: number; body: Json; cookie: string | null; headers: Headers }> {
   const headers: Record<string, string> = {}
   if (options.body !== undefined) headers['content-type'] = 'application/json'
   if (options.cookie) headers['cookie'] = options.cookie
@@ -73,6 +73,8 @@ async function call(
     status: res.status,
     body: (await res.json()) as Json,
     cookie: setCookie ? (setCookie.split(';')[0] ?? null) : null,
+    // 契約はボディだけではない。Retry-After のように**ヘッダが仕様の一部**の応答がある
+    headers: res.headers,
   }
 }
 
@@ -900,6 +902,44 @@ describe('レート制限（NFR-O3 / F04）', () => {
 
     expect(third.status).toBe(429)
     expect(third.body.error.code).toBe('RATE_LIMITED')
+    delete process.env['RATE_LIMIT_SESSIONS_PER_HOUR']
+  })
+
+  /**
+   * 画面に「あと約 N 分」を出すための値。**これが無いと「しばらく待って」としか
+   * 言えず、待てば済むのか設定を見直すべきなのかを利用者が判断できない。**
+   * 同一オリジン配信（ADR-012）なので、ブラウザからヘッダをそのまま読める。
+   */
+  it('429 には待ち時間が Retry-After で載る', async () => {
+    process.env['RATE_LIMIT_SESSIONS_PER_HOUR'] = '1'
+    const cookie = await signIn('retry-after@example.com')
+
+    await startSession(cookie)
+    const blocked = await call('POST', '/v1/sessions', { cookie, body: { errorText: ERROR_TEXT } })
+
+    expect(blocked.status).toBe(429)
+    const retryAfter = Number(blocked.headers.get('retry-after'))
+    expect(Number.isFinite(retryAfter)).toBe(true)
+    expect(retryAfter).toBeGreaterThan(0)
+    // 窓は 1 時間。直前に作ったばかりなので、ほぼ 1 時間が残っている
+    expect(retryAfter).toBeLessThanOrEqual(3600)
+    delete process.env['RATE_LIMIT_SESSIONS_PER_HOUR']
+  })
+
+  /**
+   * MOCK_MODE が消すのは LLM だけ（ADR-014）。レート制限は
+   * データストア上の実データで判定するため、モックでも同じように効く。
+   * このテスト自体が MOCK_MODE=true で走っていることが、その担保になっている。
+   */
+  it('MOCK_MODE でもレート制限は効く（消えるのは LLM だけ）', async () => {
+    expect(ENV.MOCK_MODE).toBe('true')
+    process.env['RATE_LIMIT_SESSIONS_PER_HOUR'] = '1'
+    const cookie = await signIn('mock-rate@example.com')
+
+    await startSession(cookie)
+    const blocked = await call('POST', '/v1/sessions', { cookie, body: { errorText: ERROR_TEXT } })
+
+    expect(blocked.status).toBe(429)
     delete process.env['RATE_LIMIT_SESSIONS_PER_HOUR']
   })
 })

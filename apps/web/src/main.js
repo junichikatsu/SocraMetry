@@ -16,6 +16,7 @@
 import { api, ApiError, apiWithRetry } from './api.js'
 import { byId, el } from './dom.js'
 import { renderHistory, renderStats } from './dashboard.js'
+import { retryLabel } from './format.js'
 import * as maskPreview from './mask-preview.js'
 import { costNodes, reportCard, revealNodes } from './report.js'
 import { FRAMEWORKS, LANGUAGES, stageName } from './stages.js'
@@ -43,7 +44,17 @@ const state = {
 
 function showError(err) {
   let message = err instanceof ApiError ? `${err.message}（${err.code}）` : String(err)
-  if (err instanceof ApiError && err.detail) message += `\n${JSON.stringify(err.detail, null, 2)}`
+
+  if (err instanceof ApiError) {
+    /**
+     * **サーバは待ち時間を計算して `Retry-After` に入れている。**
+     * それを出さずに「しばらく待ってから」とだけ言うと、待てば済むのか
+     * 設定を見直すべきなのかが利用者に判断できない。
+     */
+    const wait = retryLabel(err.retryAfterSec)
+    if (wait) message += `\n${wait}`
+    if (err.detail) message += `\n${JSON.stringify(err.detail, null, 2)}`
+  }
 
   const target = state.me ? byId('error') : byId('login-error')
   target.textContent = message
