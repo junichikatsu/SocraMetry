@@ -112,15 +112,20 @@
       </span>
     </div>
 
+    <!-- 並びとラベルは PR #33 の画面設計に合わせる -->
     <nav class="nav">
       <button id="nav-chat" class="nav__item is-active" type="button" data-view="chat">
-        <span class="nav__icon" aria-hidden="true">＋</span>新規チャット
+        <span class="nav__icon" aria-hidden="true">＋</span>新規セッション
       </button>
       <button id="nav-history" class="nav__item" type="button" data-view="history">
-        <span class="nav__icon" aria-hidden="true">▤</span>チャット一覧
+        <span class="nav__icon" aria-hidden="true">▤</span>セッション一覧
       </button>
       <button class="nav__item" type="button" disabled>
         <span class="nav__icon" aria-hidden="true">⌕</span>検索<span class="nav__badge">v0.2</span>
+      </button>
+      <!-- トレーニングプロジェクトの選択（演習モード / FR-34）。v0.2 -->
+      <button class="nav__item" type="button" disabled>
+        <span class="nav__icon" aria-hidden="true">▦</span>トレーニングメニュー<span class="nav__badge">v0.2</span>
       </button>
       <button id="nav-dashboard" class="nav__item" type="button" data-view="dashboard">
         <span class="nav__icon" aria-hidden="true">▥</span>ダッシュボード
@@ -138,7 +143,7 @@
           <span id="me-mail" class="me__mail"></span>
         </span>
       </div>
-      <button id="btn-logout" class="btn btn--ghost btn--small" type="button">ログアウト</button>
+      <button id="btn-logout" class="btn btn--ghost btn--small btn--block" type="button">ログアウト</button>
     </div>
   </aside>
 
@@ -174,6 +179,20 @@
       <div id="thread" class="thread" aria-live="polite"></div>
 
       <div class="composer">
+        <!--
+          進行の操作は入力欄の上に固定する（PR #33 の画面設計）。
+          スレッド内に置くと、会話が進むたびに古いボタンが残り続ける。
+          **どれを押せるかはサーバの actions に従う**（socratic-engine.md §7）。
+        -->
+        <div id="gate-actions" class="gate-actions" hidden>
+          <p id="gate-note" class="gate-actions__note" hidden></p>
+          <span class="gate-actions__spacer"></span>
+          <button id="btn-hint" class="gate-btn gate-btn--hint" type="button" hidden>ヒントに進む</button>
+          <button id="btn-advance" class="gate-btn gate-btn--advance" type="button" hidden>設問に進む</button>
+          <button id="btn-reveal" class="gate-btn gate-btn--advance" type="button" hidden>解説を読む</button>
+          <button id="btn-declare" class="gate-btn gate-btn--declare" type="button" hidden aria-pressed="false">原因が分かった</button>
+        </div>
+
         <!-- 送信前マスキングプレビュー（security.md §3 A）。常時表示のパネル -->
         <div id="mask" class="mask" hidden>
           <div class="mask__head">
@@ -208,6 +227,37 @@
           </div>
         </form>
         <p id="composer-hint" class="composer__hint"></p>
+      </div>
+
+      <!--
+        文脈の追加（PR #33 / chat-screen-add-context-dialog）。
+        エラー送信後に「追加する」を選んだときだけ開く。すべて任意入力で、
+        既存 API の codeSnippet / recentChange にそのまま対応する。
+      -->
+      <div id="context-dialog" class="dialog" hidden role="dialog" aria-modal="true" aria-labelledby="context-title">
+        <form id="form-context" class="dialog__card">
+          <h2 id="context-title" class="dialog__title">▼ 関係するコードや状況を足す（任意）</h2>
+          <label class="field">
+            <span class="field__label">コード断片</span>
+            <textarea class="input dialog__code" name="codeSnippet" rows="4"></textarea>
+          </label>
+          <label class="field">
+            <span class="field__label">直前にした変更</span>
+            <input class="input" name="recentChange" type="text" placeholder="API のレスポンス形式を変えた" />
+            <span class="field__hint">「切り分け」の問いがここから作られます</span>
+          </label>
+          <div class="dialog__row">
+            <label class="field">
+              <span class="field__label">言語</span>
+              <select id="context-language" class="input" name="language"></select>
+            </label>
+            <label class="field">
+              <span class="field__label">フレームワーク</span>
+              <select id="context-framework" class="input" name="framework"></select>
+            </label>
+          </div>
+          <button class="btn btn--primary btn--block" type="submit">エラーを見てもらう</button>
+        </form>
       </div>
     </section>
 

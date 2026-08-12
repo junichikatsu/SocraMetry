@@ -72,6 +72,10 @@ const TOGGLED = [
   'view-history', //   .view    flex
   'btn-send', //       .send    grid
   'errorlog', //       指定なし（貼ったエラーの固定パネル）
+  'gate-actions', //   .gate-actions  flex（進行の操作バー / PR #33）
+  'gate-note', //      指定なし
+  'btn-declare', //    .gate-btn      指定なし
+  'context-dialog', // .dialog        grid（文脈の追加 / PR #33）
   'mask', //           指定なし
   'error', //          指定なし
   'mock-badge', //     指定なし（span）
@@ -164,5 +168,11 @@ describe('初期表示', () => {
     expect(fresh.window.document.getElementById('view-chat')?.hidden).toBe(false)
     expect(fresh.window.document.getElementById('view-dashboard')?.hidden).toBe(true)
     expect(fresh.window.document.getElementById('view-history')?.hidden).toBe(true)
+  })
+
+  it('進行の操作バーと文脈の追加ダイアログは、セッションが無い間は出ない', () => {
+    const fresh = new JSDOM(read('index.html'))
+    expect(fresh.window.document.getElementById('gate-actions')?.hidden).toBe(true)
+    expect(fresh.window.document.getElementById('context-dialog')?.hidden).toBe(true)
   })
 })
