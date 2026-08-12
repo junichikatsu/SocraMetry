@@ -160,10 +160,6 @@ function setComposerMode(mode) {
   byId('composer-hint').textContent = COMPOSER[mode].hint
   const send = /** @type {HTMLButtonElement} */ (byId('btn-send'))
   send.disabled = !COMPOSER[mode].active
-  // 言語・FW はセッションの属性なので、エラー投稿のときだけ出す
-  byId('form-compose').querySelectorAll('.select').forEach((n) => {
-    /** @type {HTMLElement} */ (n).hidden = mode !== 'compose'
-  })
   maskPreview.reset()
   updateComposer()
   renderGateActions()
@@ -374,7 +370,6 @@ function fireAutoAdvance() {
  * この時点で離脱した場合は何も作られていない（レート制限の枠も使わない）。
  */
 function submitError() {
-  const form = /** @type {HTMLFormElement} */ (byId('form-compose'))
   const input = /** @type {HTMLTextAreaElement} */ (byId('composer-input'))
 
   const raw = input.value.trim()
@@ -383,15 +378,13 @@ function submitError() {
   /**
    * **マスク済みテキストだけを送る**（security.md §3）。
    * サーバ側でも同じ関数を再実行する（冪等）。正はサーバ側。
+   *
+   * 言語 / FW はここでは持たない。**文脈の追加ダイアログに一本化した。**
+   * 入力欄とダイアログの両方に選択があると、違う値を選べてしまい
+   * 「どちらが送られたのか」が画面から読めなくなる。
    */
   const errorText = maskPreview.mask(raw).text
-
-  const values = { errorText }
-  for (const key of ['language', 'framework']) {
-    const value = /** @type {HTMLSelectElement} */ (form.querySelector(`[name="${key}"]`)).value
-    if (value !== '') values[key] = value
-  }
-  state.pending = values
+  state.pending = { errorText }
 
   /**
    * スレッドには**先頭行だけ**を出す。全文は上の固定パネルに常時出ているので、
@@ -443,12 +436,37 @@ function createSessionOrRetry(extra) {
   })
 }
 
-/** 文脈の追加ダイアログ。言語 / FW は入力欄の選択を初期値にする（PR #33） */
+/**
+ * 言語 / FW の記憶。ダイアログで選んだ値を、次回の初期値にする（PR #33 の
+ * 「前回のセッションを引き継ぐ」）。デバッグ対象の言語は普通しばらく同じなので、
+ * 毎回選び直させない。中身は選択リストの値だけで、秘匿情報は入らない。
+ */
+const PREFS_KEY = 'socrametry.context'
+
+function loadPrefs() {
+  try {
+    return JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}')
+  } catch {
+    return {}
+  }
+}
+
+function savePrefs(prefs) {
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify(prefs))
+  } catch {
+    // プライベートモード等で保存できなくても、導線は止めない
+  }
+}
+
+/** 文脈の追加ダイアログ。言語 / FW は前回選んだ値を初期値にする */
 function openContextDialog() {
+  const prefs = loadPrefs()
   const language = /** @type {HTMLSelectElement} */ (byId('context-language'))
   const framework = /** @type {HTMLSelectElement} */ (byId('context-framework'))
-  language.value = state.pending?.language ?? ''
-  framework.value = state.pending?.framework ?? ''
+  // リストに無い値（古い記憶）は select が '' に落とすので、そのままでよい
+  language.value = typeof prefs.language === 'string' ? prefs.language : ''
+  framework.value = typeof prefs.framework === 'string' ? prefs.framework : ''
   byId('context-dialog').hidden = false
   const code = /** @type {HTMLTextAreaElement|null} */ (
     byId('form-context').querySelector('textarea')
@@ -896,7 +914,6 @@ function newSession() {
   thread.reset()
   hideErrorLog()
   renderTopbar()
-  // 言語 / FW の選択は**リセットしない**。前回のセッションを引き継ぐ（PR #33）
   setComposerMode('compose')
   selectView('chat')
   greet()
@@ -991,8 +1008,6 @@ function onSubmit(id, handler) {
   })
 }
 
-fillSelect(byId('select-language'), LANGUAGES)
-fillSelect(byId('select-framework'), FRAMEWORKS)
 fillSelect(byId('context-language'), LANGUAGES)
 fillSelect(byId('context-framework'), FRAMEWORKS)
 maskPreview.setupMaskPreview()
@@ -1047,10 +1062,14 @@ byId('form-context').addEventListener('submit', (event) => {
   // これらも LLM に届く。エラー本文と同じくマスクしてから送る（security.md §3）
   if (code !== '') extra.codeSnippet = maskPreview.mask(code).text
   if (change !== '') extra.recentChange = maskPreview.mask(change).text
+  const prefs = {}
   for (const key of ['language', 'framework']) {
     const value = /** @type {HTMLSelectElement} */ (byId(`context-${key}`)).value
+    prefs[key] = value
     if (value !== '') extra[key] = value
   }
+  // 選んだ値を次回の初期値として記憶する（「指定しない」に戻したことも記憶する）
+  savePrefs(prefs)
   byId('context-dialog').hidden = true
   form.reset()
   createSessionOrRetry(extra)

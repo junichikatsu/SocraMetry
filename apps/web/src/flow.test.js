@@ -112,6 +112,10 @@ async function bootApp() {
   globalThis.location = /** @type {any} */ (dom.window.location)
   globalThis.FormData = /** @type {any} */ (dom.window.FormData)
   globalThis.fetch = /** @type {any} */ (fetchMock)
+  // 言語 / FW の記憶に使う。JSDOM ごとに独立するのでテスト間で漏れない
+  globalThis.localStorage = /** @type {any} */ (dom.window.localStorage)
+  // 「設問に進む」「進行中の破棄」の確認。テストでは常に進む
+  dom.window.confirm = () => true
 
   vi.resetModules()
   await import('./main.js')
@@ -202,24 +206,20 @@ describe('新規セッション開始の流れ（PR #33）', () => {
   it('「追加する」→ダイアログ→「エラーを見てもらう」で文脈つきのセッションが作られる', async () => {
     const app = await bootApp()
 
-    // 言語の選択はダイアログとセッションに引き継がれる
-    const language = /** @type {HTMLSelectElement} */ (app.d.getElementById('select-language'))
-    language.value = 'typescript'
-
     await app.sendError('TypeError: boom')
     app.clickButton('追加する')
 
-    // ダイアログが開き、言語は入力欄の選択を初期値にしている
     const dialog = app.d.getElementById('context-dialog')
     expect(dialog?.hidden).toBe(false)
-    expect(/** @type {HTMLSelectElement} */ (app.d.getElementById('context-language')).value).toBe('typescript')
     expect(app.sessionPosts()).toHaveLength(0) // まだ作らない
 
     const form = /** @type {HTMLFormElement} */ (app.d.getElementById('form-context'))
     const code = /** @type {HTMLTextAreaElement} */ (form.querySelector('[name="codeSnippet"]'))
     const change = /** @type {HTMLInputElement} */ (form.querySelector('[name="recentChange"]'))
+    const language = /** @type {HTMLSelectElement} */ (app.d.getElementById('context-language'))
     code.value = 'const items = props.items.map(f)'
     change.value = 'API のレスポンス形式を変えた'
+    language.value = 'typescript'
     form.dispatchEvent(new app.dom.window.Event('submit', { cancelable: true }))
     await flush()
 
@@ -233,6 +233,41 @@ describe('新規セッション開始の流れ（PR #33）', () => {
       language: 'typescript',
     })
     expect(app.threadText()).toContain('着眼点です')
+  })
+
+  it('ダイアログで選んだ言語 / FW を記憶し、次回は選択された状態で開く', async () => {
+    const app = await bootApp()
+
+    // 1 回目: typescript / react を選んで送る
+    await app.sendError('TypeError: boom')
+    app.clickButton('追加する')
+    const language = /** @type {HTMLSelectElement} */ (app.d.getElementById('context-language'))
+    const framework = /** @type {HTMLSelectElement} */ (app.d.getElementById('context-framework'))
+    language.value = 'typescript'
+    framework.value = 'react'
+    const form = /** @type {HTMLFormElement} */ (app.d.getElementById('form-context'))
+    form.dispatchEvent(new app.dom.window.Event('submit', { cancelable: true }))
+    await flush()
+
+    // 新規セッションへ（進行中の確認は confirm=true で通す）
+    app.d.getElementById('nav-chat')?.dispatchEvent(
+      new app.dom.window.MouseEvent('click', { bubbles: true }),
+    )
+    await flush()
+    expect(app.threadText()).toContain('ようこそ') // 新しいスレッドに戻った
+
+    // 2 回目: ダイアログを開くと前回の選択が入っている
+    await app.sendError('ReferenceError: x is not defined')
+    app.clickButton('追加する')
+    expect(language.value).toBe('typescript')
+    expect(framework.value).toBe('react')
+
+    // そのまま送れば前回の言語で作られる
+    form.dispatchEvent(new app.dom.window.Event('submit', { cancelable: true }))
+    await flush()
+    const posts = app.sessionPosts()
+    expect(posts).toHaveLength(2)
+    expect(posts[1].body).toMatchObject({ language: 'typescript', framework: 'react' })
   })
 
   it('未入力のままでも「エラーを見てもらう」で進める（すべて任意）', async () => {
