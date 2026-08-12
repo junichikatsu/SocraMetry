@@ -22,6 +22,22 @@ import { Hono } from 'hono'
 const ASSETS = ['index.html', 'styles.css', 'app.js'] as const
 export type AssetName = (typeof ASSETS)[number]
 
+/**
+ * `index.html` の中でアセットの版を差し込む場所。
+ *
+ * **`cache-control: no-cache` が効くのは HTML だけだった。**
+ * 実行環境の前段（Cloudflare）が拡張子で判断して、`.css` と `.js` に
+ * `max-age=14400` を上書きする。こちらのヘッダは残らない。
+ *
+ * 結果、デプロイ後もブラウザは 4 時間前の CSS と JS を使い続ける。
+ * **サーバが新しいものを返していても画面は古いまま**という、
+ * 最も気づきにくい壊れ方になる（実際に気づかれずにデモ直前まで来た）。
+ *
+ * ヘッダを通せない以上、**URL を変えるしかない。** コミットごとに
+ * `styles.css?v=<commit>` へ変わるので、前段のキャッシュは別物として扱う。
+ */
+const VERSION_TOKEN = '__ASSET_VERSION__'
+
 const CONTENT_TYPES: Record<AssetName, string> = {
   'index.html': 'text/html; charset=utf-8',
   'styles.css': 'text/css; charset=utf-8',
@@ -48,8 +64,24 @@ export function setStaticAssetLoader(fn: AssetLoader | null): void {
 }
 
 function assetBody(name: AssetName): string | null {
-  return loader?.(name) ?? embedded[name] ?? null
+  const body = loader?.(name) ?? embedded[name] ?? null
+  if (body === null || name !== 'index.html') return body
+  // ローカル（ビルドなし）では毎回変える。編集がすぐ反映される方を取る
+  return body.replaceAll(VERSION_TOKEN, assetVersion())
 }
+
+/**
+ * アセットの版。デプロイした ZIP のコミットを使う。
+ *
+ * ローカルはコミットが `local` 固定になり、編集しても URL が変わらないので
+ * 起動時刻を混ぜる。ここだけは「毎回変わる」方が都合がよい。
+ */
+function assetVersion(): string {
+  const commit = typeof __BUILD_INFO__ !== 'undefined' ? __BUILD_INFO__.commit : 'local'
+  return commit === 'local' || commit === 'unknown' ? `dev-${startedAt}` : commit.slice(0, 12)
+}
+
+const startedAt = Date.now().toString(36)
 
 export function createStaticRoutes(): Hono {
   const routes = new Hono()
@@ -93,8 +125,14 @@ function sendAsset(c: Context, name: AssetName): Response {
 
   return c.body(body, 200, {
     'content-type': CONTENT_TYPES[name],
-    // CDN を挟まない構成なので、キャッシュより「デプロイが即反映される」を取る。
-    // デモ中に古い画面が出る方が損失が大きい
+    /*
+      キャッシュより「デプロイが即反映される」を取る。デモ中に古い画面が出る方が
+      損失が大きい。
+
+      ★ ただし**このヘッダが残るのは HTML だけ**。実行環境の前段が
+        `.css` / `.js` に `max-age=14400` を上書きする（deployment.md §4.4）。
+        そちらは `index.html` の `?v=` で URL を変えて跨いでいる。
+    */
     'cache-control': 'no-cache',
   })
 }

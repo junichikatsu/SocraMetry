@@ -317,6 +317,48 @@ build → update file → deploy cloud → add file-version
 
 ---
 
+## 4.4 前段のキャッシュ — `no-cache` は CSS と JS に効かない
+
+**実測（staging）**:
+
+| パス | 返ってくる `Cache-Control` |
+|---|---|
+| `/`（HTML） | `no-cache` ← `static.ts` が付けたものが残る |
+| `/styles.css` | **`max-age=14400`** |
+| `/app.js` | **`max-age=14400`** |
+
+実行環境の前段（Cloudflare）が**拡張子で判断して上書きする**。
+`static.ts` は全ファイルに `no-cache` を付けているが、`.css` と `.js` では残らない。
+
+> **これはデプロイの失敗より気づきにくい。**
+> `/v1/health` の `commit` は新しく、サーバも新しいファイルを返しているのに、
+> **ブラウザは 4 時間前の CSS と JS を使い続ける。**
+> 「デプロイしたのに画面が変わらない」という形で出る。
+> 実際、この挙動に気づくまで修正を 3 回デプロイしていた。
+
+**ヘッダを通せない以上、URL を変えるしかない。**
+`index.html` はそのまま届くので、そこにコミットを差し込む。
+
+```html
+<link rel="stylesheet" href="styles.css?v=__ASSET_VERSION__" />
+<script src="app.js?v=__ASSET_VERSION__"></script>
+```
+
+`__ASSET_VERSION__` は `static.ts` が配信時にコミットへ置換する
+（ローカルは起動ごとに変わる値）。コミットが変われば URL が変わり、
+前段は別のリソースとして扱う。
+
+**確認のしかた**:
+
+```bash
+# 版が入っているか（2 か所とも同じ値になる）
+curl -sS "$URL/" | grep -o 'v=[0-9a-f]\{12\}'
+```
+
+`?v=` を外すと、この問題がそのまま戻る。`static.test.ts` で検査している。
+
+---
+
 ## 5. ロールバック
 
 `enebular add file-version` でバージョンを記録しているため、

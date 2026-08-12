@@ -41,8 +41,9 @@ let dom
 beforeAll(() => {
   const html = read('index.html')
   const css = read('styles.css')
-  // 外部参照（<link rel="stylesheet">）は読ませず、中身を直接埋め込む
-  dom = new JSDOM(html.replace('<link rel="stylesheet" href="styles.css" />', `<style>${css}</style>`))
+  // 外部参照（<link> / <script>）は読ませず、CSS の中身を直接埋め込む。
+  // href には `?v=` が付くため、決め打ちではなく属性で拾う
+  dom = new JSDOM(html.replace(/<link rel="stylesheet"[^>]*>/, `<style>${css}</style>`))
 })
 
 const isVisible = (id) => {

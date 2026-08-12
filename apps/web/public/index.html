@@ -11,7 +11,12 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>SocraMetry — AI Debug Training</title>
-<link rel="stylesheet" href="styles.css" />
+<!--
+  ★ `?v=` を外さないこと。実行環境の前段が .css / .js に max-age を上書きするため、
+    URL を変えないとデプロイしても古いものが使われ続ける（apps/function/src/static.ts）。
+    値はサーバが配信時に差し込む。
+-->
+<link rel="stylesheet" href="styles.css?v=__ASSET_VERSION__" />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%236864d9'/><text x='16' y='23' font-size='20' font-weight='700' text-anchor='middle' fill='white'>&#931;</text></svg>" />
 </head>
 <body>
@@ -230,6 +235,6 @@
   </main>
 </div>
 
-<script src="app.js"></script>
+<script src="app.js?v=__ASSET_VERSION__"></script>
 </body>
 </html>
