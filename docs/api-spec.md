@@ -137,6 +137,7 @@ Set-Cookie: sm_session=<jwt>; HttpOnly; Secure; SameSite=None; Max-Age=86400; Pa
 | POST | `/v1/sessions` | セッション開始。**Gate A のヒントを返す。診断は待たない** | member | 〜5 秒 |
 | POST | `/v1/sessions/:id/diagnose` | 先行診断の実行（クライアントが即座に発火） | member | 〜20 秒 |
 | GET | `/v1/sessions/:id` | セッション状態の取得（復帰用） | member | 〜1 秒 |
+| GET | `/v1/sessions/:id/transcript` | **中断からの復旧用の記録**（#27 / 下記） | member | 〜1 秒 |
 | POST | `/v1/sessions/:id/hints` | **Gate A**: ヒントレベルを 1 段階上げる | member | 〜3 秒 |
 | POST | `/v1/sessions/:id/advance` | **Gate A → B**: 設問に進む | member | 〜5 秒 |
 | POST | `/v1/sessions/:id/answers` | **Gate B**: 選択肢に回答し、次の設問を得る | member | 〜4 秒 |
@@ -318,6 +319,23 @@ Set-Cookie: sm_session=<jwt>; HttpOnly; Secure; SameSite=None; Max-Age=86400; Pa
 
 > **設問は返さない。** Gate A は着眼点のヒントのみ。
 > ここで解決できたセッションが最上位評価（`gate_factor` 1.00）になる。
+
+**中断していた時間は時間条件から差し引く**（#27）
+
+`sessions` は `lastSeenAt`（最後の操作）と `awayMs`（中断の合計）を持つ。
+セッションを読むすべての経路で空白を判定し、次のように扱う。
+
+| 空白 | 扱い |
+|---|---|
+| 1 分未満 | ふつうの操作間隔。何もしない |
+| 1 分以上 | `awayMs` に足す。`autoAdvanceInMs` と Gate C の解放から引かれる |
+| `SESSION_ABANDON_AFTER_MS`（既定 24 時間）以上 | `status: "abandoned"`。以降の操作は `409` |
+
+> 2 つのタイマーは「詰まった人を助けるための安全弁」であって評価のための計測ではない
+> （socratic-engine.md §7 / P2）。中断を数えると
+> **「昨日のセッションを開いた瞬間に設問へ飛ぶ」「一晩置けば解説に直行できる」**が起きる。
+>
+> `startedAt` は書き換えない。履歴の表示に使う値なので、事実として動かさない。
 
 **`autoAdvanceInMs` について**（FR-07 の時間経過による Gate A → B）
 
@@ -570,6 +588,39 @@ socratic-engine.md §4.3 の「詰まった人を助ける」目的と逆にな�
 回答するとセッションが `completed` になる。
 
 ---
+
+### 3.7a `GET /v1/sessions/:id/transcript` — 中断からの復旧（#27）
+
+`sessions` に入っている記録を**時系列に並べ直して返す。** 画面はこれを順に流して
+スレッドを組み直す。
+
+```jsonc
+{
+  "session": { /* SessionPublic */ },
+  "entries": [
+    { "kind": "error",   "at": 1786000000000, "body": "TypeError: …", "language": "typescript" },
+    { "kind": "hint",    "at": 1786000000100, "level": 1, "body": "…", "auto": true },
+    { "kind": "question","at": 1786000060000, "stage": "observe", "seqInStage": 1,
+      "body": "…", "options": [/* … */],
+      // 未回答なら null。再開後に続きから答える対象
+      "answer": { "selectedOptionId": "b", "isCorrect": true, "feedback": "…" } },
+    { "kind": "conclusion", "at": 1786000200000, "body": "…", "verdict": null, "feedback": "…" }
+    // Gate C 到達済みなら reveal / retrospection が続く
+  ],
+  "question": null,              // 未回答の設問
+  "actions": { /* … */ }
+}
+```
+
+> **答えが漏れる新しい経路は作っていない。**
+> 元になる `sessions` には正解 ID も内部診断も入っていない（ADR-005 で
+> `session_secrets` に隔離済み）。並べ直しただけの応答は**構造として答えを含みようがない。**
+>
+> 唯一の例外が `reveal` で、これは答えそのもの。**`gate` が `C` の場合にだけ**載せる。
+> 検査は `api.test.ts` の「Gate C の前は解説を含まない（DoD #2）」。
+
+`conclusions` は冪等判定用のハッシュに加えて**本文（マスキング済み）も保存する。**
+ハッシュだけだと、再開したときに自分が何を書いたか復元できないため。
 
 ### 3.8 `GET /v1/sessions/:id/report` — 振り返りレポート
 

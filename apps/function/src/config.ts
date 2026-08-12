@@ -19,6 +19,8 @@ export type ConfigIssue = {
   reason: 'missing' | 'placeholder'
 }
 
+import type { GateTimeouts } from '@socrametry/core'
+
 type Env = Record<string, string | undefined>
 
 function value(env: Env, key: string): string {
@@ -120,10 +122,16 @@ export function inviteCode(env: Env = process.env): string {
  * 設定にしてあるので、実測で外れても直すのは 1 行で済む。
  * デモ用プリセットは `GATE_A_TIMEOUT_MS=60000` / `GATE_B_TIMEOUT_MS=300000`。
  */
-export function gateTimeouts(env: Env = process.env): { gateAMs: number; gateBMs: number } {
+export function gateTimeouts(env: Env = process.env): GateTimeouts {
   return {
     gateAMs: intValue(env, 'GATE_A_TIMEOUT_MS', 5 * 60 * 1000),
     gateBMs: intValue(env, 'GATE_B_TIMEOUT_MS', 30 * 60 * 1000),
+    /**
+     * これを超えて操作がないセッションは再開させず `abandoned` にする。
+     * 短い中断は差し引いて続きから再開できるが、何日も空いたものを
+     * そのまま続けさせると、途中の記録が何を測ったものか分からなくなる。
+     */
+    abandonAfterMs: intValue(env, 'SESSION_ABANDON_AFTER_MS', 24 * 60 * 60 * 1000),
   }
 }
 

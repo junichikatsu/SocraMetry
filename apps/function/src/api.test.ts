@@ -819,6 +819,126 @@ describe('答えが Gate C 到達前に漏れない（DoD #2）', () => {
   })
 })
 
+/**
+ * 中断したセッションの復旧（#27）。
+ *
+ * 会話の記録は `sessions` に全部入っている。それを時系列に並べ直すだけなので、
+ * **答えが漏れる新しい経路は作られない**（正解 ID も内部診断も別テーブル / ADR-005）。
+ */
+describe('中断したセッションを復旧する', () => {
+  /** 保存済みのセッションの時刻を巻き戻し、中断があったことにする */
+  function rewind(sessionId: string, byMs: number): void {
+    const session = store.dump('sessions').find((s) => (s as Json).sessionId === sessionId) as Json
+    session.lastSeenAt = (session.lastSeenAt as number) - byMs
+  }
+
+  it('貼ったエラー・ヒント・設問・回答・原因宣言が時系列で返る', async () => {
+    const cookie = await signIn('transcript@example.com')
+    const id = (await startSession(cookie)).session.id
+
+    await call('POST', `/v1/sessions/${id}/diagnose`, { cookie })
+    await call('POST', `/v1/sessions/${id}/hints`, { cookie })
+    const advanced = await call('POST', `/v1/sessions/${id}/advance`, { cookie })
+    const question = advanced.body.question as Json
+    await call('POST', `/v1/sessions/${id}/answers`, {
+      cookie,
+      body: { questionId: question.id, selectedOptionId: correctOptionFor(id, 1) },
+    })
+    await call('POST', `/v1/sessions/${id}/conclusion`, {
+      cookie,
+      body: { body: 'コネクションのクローズ漏れでプールが枯渇していると考えます' },
+    })
+
+    const res = await call('GET', `/v1/sessions/${id}/transcript`, { cookie })
+    expect(res.status).toBe(200)
+
+    const entries = res.body.entries as Json[]
+    const kinds = entries.map((e) => e.kind)
+    expect(kinds[0]).toBe('error')
+    expect(kinds).toContain('hint')
+    expect(kinds).toContain('question')
+    expect(kinds).toContain('conclusion')
+
+    // 時系列に並んでいる
+    const times = entries.map((e) => e.at as number)
+    expect([...times].sort((a, b) => a - b)).toEqual(times)
+
+    // 回答済みの設問には選んだ選択肢とフィードバックが付く
+    const answered = entries.find((e) => e.kind === 'question') as Json
+    expect((answered.answer as Json).selectedOptionId).toBe(correctOptionFor(id, 1))
+
+    // **原因宣言の本文が戻る**（ハッシュだけだと再開時に復元できない）
+    const conclusion = entries.find((e) => e.kind === 'conclusion') as Json
+    expect(conclusion.body).toContain('クローズ漏れ')
+  })
+
+  it('Gate C の前は解説を含まない（DoD #2）', async () => {
+    const cookie = await signIn('transcript-leak@example.com')
+    const id = (await startSession(cookie)).session.id
+
+    await call('POST', `/v1/sessions/${id}/diagnose`, { cookie })
+    await call('POST', `/v1/sessions/${id}/advance`, { cookie })
+
+    const res = await call('GET', `/v1/sessions/${id}/transcript`, { cookie })
+    const dumped = JSON.stringify(res.body)
+
+    expect(dumped).not.toContain(MOCK_DIAGNOSIS.rootCause)
+    for (const evidence of MOCK_DIAGNOSIS.evidence) expect(dumped).not.toContain(evidence)
+    expect(dumped).not.toContain('correctOptionId')
+    expect((res.body.entries as Json[]).some((e) => e.kind === 'reveal')).toBe(false)
+  })
+
+  it('他人のセッションは復旧できない', async () => {
+    const owner = await signIn('transcript-owner@example.com')
+    const id = (await startSession(owner)).session.id
+    const other = await signIn('transcript-other@example.com')
+
+    const res = await call('GET', `/v1/sessions/${id}/transcript`, { cookie: other })
+    expect(res.status).toBe(404)
+  })
+
+  it('短い中断は差し引かれ、続きから再開できる', async () => {
+    const cookie = await signIn('resume@example.com')
+    const id = (await startSession(cookie)).session.id
+    await call('POST', `/v1/sessions/${id}/hints`, { cookie })
+    await call('POST', `/v1/sessions/${id}/hints`, { cookie })
+
+    // ヒントを Lv3 まで開けた時点で、自動遷移までの残り時間が動き出す
+    const before = await call('GET', `/v1/sessions/${id}/transcript`, { cookie })
+    expect(before.body.session.autoAdvanceInMs).toBeGreaterThan(0)
+
+    // 10 分席を外した（自動遷移の待ち時間 5 分より長い）
+    rewind(id, 10 * 60 * 1000)
+    const res = await call('GET', `/v1/sessions/${id}/transcript`, { cookie })
+
+    expect(res.body.session.status).toBe('active')
+    // ★ 開いた瞬間に設問へ飛ばされない。中断のぶんが差し引かれ、残り時間が生きている
+    expect(res.body.session.gate).toBe('A')
+    expect(res.body.session.autoAdvanceInMs).toBeGreaterThan(0)
+
+    // 差し引きが保存されている（次に開いたときも同じ扱いになる）
+    const stored = store.dump('sessions').find((s) => (s as Json).sessionId === id) as Json
+    expect(stored.awayMs).toBeGreaterThanOrEqual(10 * 60 * 1000)
+  })
+
+  it('打ち切りの時間を超えた中断は再開させない', async () => {
+    const cookie = await signIn('abandon@example.com')
+    const id = (await startSession(cookie)).session.id
+
+    rewind(id, 25 * 60 * 60 * 1000)
+    const res = await call('GET', `/v1/sessions/${id}/transcript`, { cookie })
+
+    // **勝手に完了にはしない。** 未解決のまま中断した事実として残す
+    expect(res.body.session.status).toBe('abandoned')
+    expect(res.body.session.reachedGate).toBeNull()
+
+    // 以降の操作は、完了ではなく中断として断る
+    const hint = await call('POST', `/v1/sessions/${id}/hints`, { cookie })
+    expect(hint.status).toBe(409)
+    expect(hint.body.error.message).toContain('中断')
+  })
+})
+
 describe('異常系で画面が止まらない（F12 / FR-17）', () => {
   it('不正な入力は 400 と原因を返す', async () => {
     const cookie = await signIn()

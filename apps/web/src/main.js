@@ -588,12 +588,144 @@ async function loadReport() {
 
 async function loadHistory() {
   const { data } = await api('GET', '/v1/me/sessions')
-  renderHistory(data.sessions)
+  renderHistory(data.sessions, {
+    onOpen: (id) => withBusy(null, () => openSession(id)),
+    onDelete: (session) => withBusy(null, () => deleteSession(session)),
+  })
+}
+
+/**
+ * セッションの削除（NFR-S7）。
+ *
+ * **確認する。** 取り消せないうえ、レポートと内部診断まで一緒に消える
+ * （data-model.md §7 の CASCADE 相当）。
+ */
+async function deleteSession(session) {
+  const ok = window.confirm(
+    `このセッションを削除しますか？\n\n${session.summary}\n\n` +
+      '結果とスコアも一緒に消えます。取り消せません。',
+  )
+  if (!ok) return
+
+  await api('DELETE', `/v1/sessions/${session.id}`)
+  // 開いているセッションを消したなら、画面も新規に戻す
+  if (state.session?.id === session.id) newSession()
+  await Promise.all([loadHistory(), loadStats().catch(() => {})])
 }
 
 async function loadStats() {
   const { data } = await api('GET', '/v1/me/stats')
   renderStats(data)
+}
+
+// ═══ 中断したセッションの復旧 ══════════════════════════════════════════════
+
+/**
+ * 記録を順に流してスレッドを組み直す（#27）。
+ *
+ * **描画は新規のときと同じ関数を使う。** 復旧用に別の見た目を作ると、
+ * 「復旧したら少し違う画面になる」という形でずれが育つ。
+ */
+async function openSession(sessionId) {
+  const { data } = await api('GET', `/v1/sessions/${sessionId}/transcript`)
+
+  clearAutoAdvance()
+  state.hints = []
+  state.question = null
+  thread.reset()
+  hideErrorLog()
+  selectView('chat')
+
+  for (const entry of data.entries) replayEntry(entry)
+
+  applySession(data)
+  renderTopbar()
+
+  const active = data.session.status === 'active'
+  if (!active) {
+    // 完了・中断したセッションは読むだけ。**続きを書ける見た目にしない**
+    setComposerMode('locked')
+    byId('composer-hint').textContent =
+      data.session.status === 'abandoned'
+        ? 'このセッションは長時間の中断により終了しています。'
+        : 'このセッションは完了しています。'
+    return
+  }
+
+  setComposerMode('conclusion')
+  // 未回答の設問が残っていれば、そこから続ける
+  if (data.question) showQuestion(data.question)
+  else thread.bot({ texts: ['ここから続けられます。'], nodes: [gateActions()] })
+}
+
+/** @param {import('@socrametry/shared').TranscriptEntryPublic} entry */
+function replayEntry(entry) {
+  if (entry.kind === 'error') {
+    const lines = entry.body.split(/\r\n?|\n/).filter((l) => l.trim() !== '')
+    thread.user({
+      who: state.me?.displayName ?? 'あなた',
+      text: 'このエラーで詰まっています。',
+      code: lines[0] ?? entry.body,
+      note: `全文（${summarize(entry.body)}）は上の「貼ったエラー」に出ています。`,
+    })
+    showErrorLog(entry.body)
+    return
+  }
+
+  if (entry.kind === 'hint') {
+    state.hints.push({ level: entry.level, body: entry.body })
+    thread.bot({
+      texts: [entry.auto ? '（同じ段階で詰まったため、ヒントを 1 段開けました）' : ''].filter(Boolean),
+      nodes: [thread.hintList([entry])],
+    })
+    return
+  }
+
+  if (entry.kind === 'question') {
+    thread.bot({
+      texts: [`${stageName(entry.stage)} — ${entry.seqInStage} 問目`],
+      callout: { label: '選択問題（Gate B）', body: entry.body },
+      // **回答済みの設問は押せない形で出す。** 押せると「やり直せる」と読める
+      nodes: [answeredOptions(entry.options, entry.answer)],
+    })
+    if (entry.answer) {
+      thread.bot({
+        lead: entry.answer.isCorrect ? '正解です。' : '惜しい。しかし、推測で片づけてはいけません。',
+        texts: [entry.answer.feedback],
+      })
+    }
+    return
+  }
+
+  if (entry.kind === 'conclusion') {
+    if (entry.body) thread.user({ who: state.me?.displayName ?? 'あなた', text: entry.body })
+    thread.bot({ texts: [entry.feedback] })
+    return
+  }
+
+  if (entry.kind === 'reveal') {
+    thread.bot({ lead: 'ここまでの経過をふまえて、原因をお伝えします。', nodes: revealNodes(entry.reveal) })
+    return
+  }
+
+  if (entry.kind === 'retrospection') {
+    thread.bot({ texts: ['振り返りに回答済みです。'] })
+  }
+}
+
+/** 回答済みの選択肢。選んだものが分かる形で、押せなくする */
+function answeredOptions(options, answer) {
+  const list = el('div', 'options')
+  for (const option of options) {
+    const picked = answer?.selectedOptionId === option.id
+    const node = el(
+      'div',
+      `option option--done${picked ? ' option--picked' : ''}`,
+      `${option.id.toUpperCase()}. ${option.label}${picked ? '（選択）' : ''}`,
+    )
+    list.appendChild(node)
+  }
+  return list
 }
 
 function newSession() {

@@ -6,7 +6,7 @@
  * v0.1 の API はセッション単位の記録までしか返さず（組織・チームの概念が無い）、
  * ダミーで埋めると「動いている」と誤読される。v0.2 の項目として名前だけ残す。
  */
-import { byId, clear, row } from './dom.js'
+import { button, byId, clear, el, row } from './dom.js'
 import { renderLegend, renderRadar } from './radar.js'
 import { GATE_LABEL, STAGES, stageName } from './stages.js'
 import { isReferenceOnly } from './report.js'
@@ -65,8 +65,11 @@ export function renderStats(stats) {
 
 const STATUS_LABEL = { active: '進行中', completed: '完了', abandoned: '中断' }
 
-/** @param {import('@socrametry/shared').SessionSummaryPublic[]} sessions */
-export function renderHistory(sessions) {
+/**
+ * @param {import('@socrametry/shared').SessionSummaryPublic[]} sessions
+ * @param {{ onOpen: (id: string) => void, onDelete: (s: object) => void }} handlers
+ */
+export function renderHistory(sessions, handlers) {
   const node = byId('history-table')
   clear(node)
 
@@ -75,17 +78,31 @@ export function renderHistory(sessions) {
     return
   }
 
-  node.appendChild(row(['エラー', '言語', '到達', 'スコア', '状態', '開始'], true))
+  node.appendChild(row(['エラー', '言語', '到達', 'スコア', '状態', '開始', ''], true))
   for (const s of sessions) {
-    node.appendChild(
-      row([
-        s.summary,
-        s.language ?? '—',
-        s.reachedGate ?? '—',
-        s.totalScore === null ? '—' : s.totalScore,
-        STATUS_LABEL[s.status] ?? s.status,
-        new Date(s.startedAt).toLocaleString('ja-JP'),
-      ]),
+    const tr = el('tr')
+    for (const cell of [
+      s.summary,
+      s.language ?? '—',
+      s.reachedGate ?? '—',
+      s.totalScore === null ? '—' : String(s.totalScore),
+      STATUS_LABEL[s.status] ?? s.status,
+      new Date(s.startedAt).toLocaleString('ja-JP'),
+    ]) {
+      tr.appendChild(el('td', undefined, cell))
+    }
+
+    const actions = el('td', 'table__actions')
+    // 進行中は「続きから」、それ以外は読むだけ。文言で行き先を変える
+    actions.appendChild(
+      button(s.status === 'active' ? '続きから' : '開く', 'btn btn--small', () =>
+        handlers.onOpen(s.id),
+      ),
     )
+    // NFR-S7: 利用者が自分のデータを削除できる
+    actions.appendChild(button('削除', 'btn btn--ghost btn--small', () => handlers.onDelete(s)))
+    tr.appendChild(actions)
+
+    node.appendChild(tr)
   }
 }

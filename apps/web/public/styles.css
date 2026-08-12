@@ -673,6 +673,13 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .table th { background: var(--bg); color: var(--ink-3); font-size: 11px; font-weight: 700; letter-spacing: 0.04em; }
 .table tr:last-child td { border-bottom: 0; }
 .table td:first-child { white-space: normal; min-width: 220px; }
+.table tbody tr:hover td, .table tr:hover td { background: var(--bg); }
+.table__actions { display: flex; gap: 6px; justify-content: flex-end; }
+
+/* 復旧したスレッドの、回答済みの選択肢。**押せない見た目にする** */
+.option--done { cursor: default; color: var(--ink-3); background: var(--bg); }
+.option--done:hover { border-color: var(--line); background: var(--bg); }
+.option--picked { border-color: var(--accent); color: var(--ink); background: var(--accent-pale); }
 
 .msg__bubble .table-wrap { margin-top: 10px; }
 

@@ -82,6 +82,8 @@ export function gateStateOf(session: SessionItem): GateState {
     reachedGate: session.reachedGate,
     startedAt: session.startedAt,
     gateEnteredAt: session.gateEnteredAt,
+    // 中断していた時間は「詰まっていた時間」ではないので、時間条件から差し引く
+    awayMs: session.awayMs,
     // 最終段階まで通過したか。`currentStage` が null になるのは Gate B を抜けたとき
     allStagesPassed: session.gate === 'B' && lastStage === null && answered.length > 0,
     stuckStageCount: session.stuckStages.length,

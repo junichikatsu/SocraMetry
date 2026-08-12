@@ -222,8 +222,22 @@ function correctRateOf(session: SessionItem): number | null {
   return correct / answered.length
 }
 
+/**
+ * セッションに向き合っていた時間。
+ *
+ * **中断していた時間（`awayMs`）は引く。** 引かないと「昨日始めて今日終えた」が
+ * 20 時間として記録され、学習時間の集計（FR-24）が意味を失う。
+ *
+ * > **v0.1 の途中で意味が変わった値である。** 中断の記録を持つ前に作られた
+ * > レポートはカレンダー時間のまま入っている。セッション数が少なく、そもそも
+ * > 横比較に耐えない段階なので（evaluation-model.md §3.5）許容しているが、
+ * > 混在していることは data-model.md に書いてある。
+ */
 function totalElapsedOf(session: SessionItem): number {
-  if (session.completedAt) return session.completedAt - session.startedAt
+  if (session.completedAt) {
+    return Math.max(0, session.completedAt - session.startedAt - session.awayMs)
+  }
+  // 未完了なら設問ごとの実測を足す。こちらは元から中断の影響を受けない
   return session.turns.reduce((sum, t) => sum + (t.elapsedMs ?? 0), 0)
 }
 

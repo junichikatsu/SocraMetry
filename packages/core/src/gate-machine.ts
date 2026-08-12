@@ -21,11 +21,47 @@ export type GateTimeouts = {
   gateAMs: number
   /** Gate B → C の解放。セッション開始からこの時間が経過したら解放する */
   gateBMs: number
+  /** これを超えて操作がなければ再開させない（`abandoned` にする） */
+  abandonAfterMs: number
 }
 
 export const DEFAULT_GATE_TIMEOUTS: GateTimeouts = {
   gateAMs: 5 * 60 * 1000,
   gateBMs: 30 * 60 * 1000,
+  abandonAfterMs: 24 * 60 * 60 * 1000,
+}
+
+/**
+ * 中断とみなす最小の空白。これ未満はふつうの操作間隔なので数えない。
+ * ここを 0 にすると、設問を読んでいる 30 秒すべてが「中断」になってしまう。
+ */
+export const RESUME_GRACE_MS = 60 * 1000
+
+export type ResumeDecision =
+  /** 空白が短い。ふつうの続き */
+  | { kind: 'continue' }
+  /** 中断からの再開。`awayMs` を時間条件から差し引く */
+  | { kind: 'resume'; awayMs: number }
+  /** 空きすぎている。再開させない */
+  | { kind: 'abandon'; awayMs: number }
+
+/**
+ * 前回の操作からの空白をどう扱うか。
+ *
+ * **判定をここに置くのは、差し引きと打ち切りが同じ 1 つの尺度だから。**
+ * サービス層に散らすと「60 秒未満は無視」と「24 時間で打ち切り」が
+ * 別々に育って、境界がずれる。
+ */
+export function resumeFrom(
+  lastSeenAt: number,
+  now: number,
+  timeouts: GateTimeouts,
+): ResumeDecision {
+  // 時計が巻き戻った場合（サーバ間のずれ等）は、進んでいないものとして扱う
+  const awayMs = Math.max(0, now - lastSeenAt)
+  if (awayMs >= timeouts.abandonAfterMs) return { kind: 'abandon', awayMs }
+  if (awayMs >= RESUME_GRACE_MS) return { kind: 'resume', awayMs }
+  return { kind: 'continue' }
 }
 
 export type GateState = {
@@ -36,6 +72,18 @@ export type GateState = {
   startedAt: number
   /** 各ゲートに入った時刻。A は必ず入っている */
   gateEnteredAt: { A: number; B: number | null; C: number | null }
+  /**
+   * 中断していた時間の合計。**時間条件から差し引く。**
+   *
+   * ここにある 2 つのタイマーは、どちらも「詰まった人を助けるための安全弁」で
+   * あって評価のための計測ではない（上の要点 3 と 4）。
+   * 助ける対象は**画面の前で詰まっている人**なので、席を外していた時間を
+   * 数えるのは筋が違う。数えると次の 2 つが起きる。
+   *
+   *   - 昨日のセッションを開いた瞬間に設問へ飛ぶ
+   *   - 一晩置けば解説に直行できる（評価としての抜け道）
+   */
+  awayMs: number
   /** Gate B を最終段階まで通過したか */
   allStagesPassed: boolean
   /** 同一段階で 3 回不正解になった段階の数。2 以上で「詰まり」と判定する */
@@ -67,7 +115,7 @@ export function canAdvanceToQuestions(state: GateState): boolean {
 export function autoAdvanceAt(state: GateState, timeouts: GateTimeouts): number | null {
   if (!canAdvanceToQuestions(state)) return null
   if (state.hintLevel < MAX_HINT_LEVEL) return null
-  return state.gateEnteredAt.A + timeouts.gateAMs
+  return state.gateEnteredAt.A + state.awayMs + timeouts.gateAMs
 }
 
 /**
@@ -111,7 +159,8 @@ export function revealGateReason(
   if (state.gate === 'A') return 'gate_a'
   if (state.allStagesPassed) return 'all_stages_passed'
   if (state.stuckStageCount >= 2) return 'stuck'
-  if (now - state.startedAt >= timeouts.gateBMs) return 'timeout'
+  // 中断していた時間は「詰まっていた時間」ではないので数えない
+  if (now - state.startedAt - state.awayMs >= timeouts.gateBMs) return 'timeout'
   return 'not_unlocked'
 }
 

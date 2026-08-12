@@ -80,6 +80,41 @@ export type AnswerResultPublic = {
   feedback: string
 }
 
+/**
+ * 中断したセッションを画面に組み直すための記録（#27）。
+ *
+ * **答えを含みようがない。** 元になる `sessions` テーブルには正解 ID も
+ * 内部診断も入っていない（ADR-005 でそれらは `session_secrets` に隔離されている）。
+ * ここで新しく漏れる経路を作らずに済むのは、その設計のおかげ。
+ *
+ * 開示（`reveal`）だけは答えそのものなので、**Gate C に到達している場合にのみ**載る。
+ */
+export type TranscriptEntryPublic =
+  /** 利用者が貼ったエラー。セッションの起点 */
+  | { kind: 'error'; at: number; body: string; language: string | null }
+  | { kind: 'hint'; at: number; level: number; body: string; auto: boolean }
+  | {
+      kind: 'question'
+      at: number
+      stage: Stage
+      seqInStage: number
+      body: string
+      options: OptionPublic[]
+      /** 未回答なら null。**再開したときに続きから答える対象** */
+      answer: { selectedOptionId: string; isCorrect: boolean; feedback: string } | null
+    }
+  | { kind: 'conclusion'; at: number; body: string; verdict: Verdict | null; feedback: string }
+  | { kind: 'reveal'; at: number; reveal: RevealPublic }
+  | { kind: 'retrospection'; at: number; selectedOptionId: string | null }
+
+export type TranscriptPublic = {
+  session: SessionPublic
+  entries: TranscriptEntryPublic[]
+  /** 未回答の設問。再開後に続きから答えられる */
+  question: QuestionPublic | null
+  actions: SessionActions
+}
+
 /** 診断待ちで次の設問を出せないときの待機情報（api-spec.md §3.5 / 202） */
 export type PendingPublic = {
   reason: 'DIAGNOSIS_IN_PROGRESS'
