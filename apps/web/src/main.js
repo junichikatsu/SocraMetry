@@ -117,9 +117,12 @@ const COMPOSER = {
   },
   conclusion: {
     placeholder: '原因が分かったら、自分の言葉で書いてください…',
-    hint:
-      '原因が分かったら宣言してください。まだ見えないなら、ヒントを増やすか設問に進めます。' +
-      'わからない場合は「わかりません」と書いても構いません（設問には戻しません）。',
+    /**
+     * **「設問には戻しません」とは書かない。** Q-15 は「戻さない」ことが要件で、
+     * 「戻さないと宣言する」ことではない。戻される可能性があったこと自体が
+     * 利用者にとっては初耳で、書いた瞬間に不安を作る側に回る。
+     */
+    hint: '原因が分かったら宣言してください。まだ見えないなら、ヒントを増やすか設問に進めます。',
   },
   locked: { placeholder: 'このセッションは完了しています', hint: '' },
 }
@@ -195,7 +198,8 @@ function gateActions() {
   if (a.canReveal) {
     specs.push({ label: '解説を読む', onClick: () => withThinking(null, reveal) })
   }
-  return thread.actionBar(specs)
+  // 押せるものが 1 つも無いなら、空の枠を置かない
+  return specs.length === 0 ? null : thread.actionBar(specs)
 }
 
 // ═══ 時間経過による Gate A → B（#20 / FR-07）══════════════════════════════
@@ -425,33 +429,28 @@ async function declareConclusion() {
   }
 
   /**
-   * `verdict: null`（「わかりません」など）は**設問に戻さない**
-   * （socratic-engine.md §4.3 / Q-15）。2 択を出して利用者に選ばせる。
+   * 到達しなかった場合（`not_reached` と `verdict: null` のどちらも）。
+   *
+   * **サーバの `feedback` が、その場面での次の一手を既に書いている。**
+   * 短すぎる入力なら「もう少し具体的に書いてください」、「わかりません」なら
+   * 「設問に戻って絞り込むか、解説を読むかを選べます」といった具合に、
+   * 理由ごとに文面が変わる（`session-service.ts` の原因宣言の分岐）。
+   *
+   * **画面はそこに言い足さない。** 以前はここで「設問に戻すことはしません」と
+   * 出していたが、これは Q-15 の設計判断（「わかりません」を `not_reached` に
+   * せず設問へ送り返さない）をそのまま利用者に向けて書いてしまったもので、
+   * 利用者にとっては「戻される可能性があった」こと自体が初耳になる。
+   * しかも隣に「設問に進む」ボタンが並ぶため、字面として矛盾していた。
+   *
+   * 出すのは他の場面と同じ**サーバの `actions` に従う行動ボタン**だけにする。
+   * Q-15 は「戻さない」ことが要件であって、「戻さないと宣言する」ことではない。
    */
-  if (data.conclusion.verdict === null) {
-    const specs = [{ label: 'もう少し自分で考える', onClick: () => {} }]
-    if (state.actions?.canAdvanceToQuestions) {
-      specs.unshift({ label: '設問に進む', onClick: () => withThinking(null, () => advance(true)) })
-    }
-    if (state.actions?.canReveal) {
-      specs.unshift({ label: '解説を読む', primary: true, onClick: () => withThinking(null, reveal) })
-    }
-    thread.bot({
-      texts: [data.conclusion.feedback],
-      callout: {
-        label: 'ここからの進み方を選んでください',
-        body: '設問に戻すことはしません。どちらでも構いません。',
-        calm: true,
-      },
-      nodes: [thread.actionBar(specs)],
-    })
-    return
-  }
-
   thread.bot({
     texts: [data.conclusion.feedback],
     nodes: [gateActions()],
   })
+  // 書き直せるようにする。入力欄は原因宣言モードのまま空いている
+  byId('composer-input').focus()
 }
 
 async function reveal() {
