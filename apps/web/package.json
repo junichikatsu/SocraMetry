@@ -7,7 +7,8 @@
   "scripts": {
     "build": "node build.mjs",
     "dev": "node build.mjs --watch",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@socrametry/core": "workspace:*"
@@ -15,6 +16,8 @@
   "devDependencies": {
     "@socrametry/shared": "workspace:*",
     "esbuild": "^0.25.11",
-    "typescript": "^5.9.3"
+    "jsdom": "^27.0.0",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
   }
 }

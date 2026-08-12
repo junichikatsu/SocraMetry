@@ -78,6 +78,19 @@ esbuild がやるのは import の解決と結合だけ、出力も `minify: fal
 | 5 | MOCK モードで動いていることを画面に明示する |
 | 6 | **外部ホストを読まない**（CDN・Web フォント・画像） |
 | 7 | 「どのボタンを出してよいか」はサーバの `actions` に従う。条件式を持たない |
+| 8 | 画面の出し分けは `hidden` 属性だけで行う（下記） |
+
+### 8: `hidden` と `display` の衝突
+
+`hidden` を効かせているのはブラウザ標準の `[hidden] { display: none }` で、
+**これは作者スタイルより弱い**。クラス側に `display: flex` を 1 行書くと、
+`hidden` を立てても表示されたままになります（実際にログイン画面で起きました）。
+
+`styles.css` の**末尾**に `[hidden] { display: none !important; }` を置いて押さえています。
+「末尾に置く」と「`!important`」の両方をやっているのは、
+どちらの解決規則でも勝つようにするためです（理由は該当箇所のコメント）。
+
+**`display` を新しく足したら `src/visibility.test.js` の `TOGGLED` に id を足してください。**
 
 ### 1 が特に重要な理由
 
@@ -102,6 +115,22 @@ optionEl.textContent = option.label
 モックは Tailwind の CDN と Google Fonts を読んでいますが、配信物では使いません。
 細い回線（テザリングでの NFR-P1 計測 / #23）でスタイルが後から降ってくる状態を作らないため、
 また同一オリジン配信（ADR-012）で消した外部依存を戻さないためです。
+
+## テスト
+
+```bash
+pnpm --filter @socrametry/web test
+```
+
+`src/visibility.test.js` が、`index.html` と `styles.css` を実際に組み上げて
+**計算済みスタイル**を見ます。見た目は対象にせず、
+「`hidden` を立てたら消える」という一点だけを守ります。
+
+型検査でも lint でも出ない種類の壊れ方なので、**組み上げて確かめるしかありません。**
+
+> jsdom は `!important` を解釈せず、指定順と詳細度だけで解決します。
+> そのため `!important` だけに頼った書き方はこのテストを通りません。
+> 実ブラウザでは通ってしまうため、**テストの方が厳しい**状態にしてあります。
 
 ## 型検査
 

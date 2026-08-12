@@ -556,6 +556,13 @@ function showLogin() {
   byId('login').hidden = false
 }
 
+/**
+ * ログインと新規登録の切替。
+ *
+ * **招待コードと表示名はログイン側に置かない。** モックは 1 枚に 3 項目を並べているが、
+ * `POST /v1/auth/login` はメールとパスワードしか受け取らない（`loginRequestSchema`）。
+ * 送られない項目を出すと「入れたのに効かない欄」になる。招待コードが要るのは登録時だけ。
+ */
 function selectTab(which) {
   const isLogin = which === 'login'
   byId('tab-login').setAttribute('aria-selected', String(isLogin))
@@ -563,6 +570,9 @@ function selectTab(which) {
   byId('form-login').hidden = !isLogin
   byId('form-signup').hidden = isLogin
   byId('login-title').textContent = isLogin ? 'アカウントにログイン' : 'アカウントを作成'
+  byId('login-note').textContent = isLogin
+    ? 'トレーニングセッションを開始するには資格情報を入力してください'
+    : '招待コードをお持ちの方が登録できます'
   clearError()
 }
 

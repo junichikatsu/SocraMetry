@@ -43,6 +43,8 @@
 
 * { box-sizing: border-box; }
 
+/* 画面の出し分けは `hidden` 属性で行う。その担保はファイル末尾（§最後）にある */
+
 html, body {
   height: 100%;
   margin: 0;
@@ -603,3 +605,26 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   .login { grid-template-columns: 1fr; }
   .login__brand { display: none; }
 }
+
+/* ==========================================================================
+   出し分け — ★ 必ずこのファイルの最後に置く
+
+   この画面はページ遷移を持たず、**すべての切替を `hidden` 属性で行う**。
+   ところが `hidden` を効かせているのはブラウザ標準スタイルの
+   `[hidden] { display: none }` で、これは**作者スタイルより弱い。**
+   クラス側に `display: flex` を 1 行書いた瞬間、`hidden` は黙って無効になる。
+
+   実際に、ログイン画面でログインと新規登録のフォームが同時に出ていた。
+   .login / .app / .form / .view / .select / .send が該当していた。
+   型検査にも lint にも出ない。**組み上げて計算済みスタイルを見るまで分からない。**
+
+   > **`!important` と「最後に置く」の両方をやる。**
+   > `!important` だけだと、実ブラウザでは勝つが、
+   > `!important` を解釈しない環境（テストで使う jsdom など）では負ける。
+   > 順序だけだと、クラス側に `!important` が付いた瞬間に負ける。
+   > **どちらの規則で解決されても勝つ形**にしておく。
+   >
+   > 検証は `src/visibility.test.js`。display を足したら、そこに id を足す。
+   ========================================================================== */
+
+[hidden] { display: none !important; }
