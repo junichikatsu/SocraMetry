@@ -1,0 +1,168 @@
+// @ts-check
+/**
+ * 対話スレッドの描画（MOCK/SocraMetry_MOC.html のチャット画面）。
+ *
+ * 3 ゲートを**1 本のスレッド**として見せる。ゲートごとに画面を切り替えると、
+ * 「同じ先輩と話し続けている」という体験（socratic-engine.md §1）が切れる。
+ * 進行はスレッドに積み上がり、前のやりとりはスクロールで残る。
+ */
+import { append, button, byId, clear, clockLabel, el } from './dom.js'
+
+const BOT = 'SOCRA_BOT (AI INSTRUCTOR)'
+
+/** ADR-007: ローディングを進捗バーではなく「先輩が考えている」表現にする */
+const THINKING = [
+  'ふむ…ログを見せてもらっています。',
+  'なるほど。少し確認させてください。',
+  'では、一つ聞かせてください。',
+  'ちょっと待ってください、いま見ています。',
+]
+
+const thread = () => byId('thread')
+
+export function reset() {
+  clear(thread())
+}
+
+function scrollToEnd() {
+  const node = thread()
+  node.scrollTop = node.scrollHeight
+}
+
+/**
+ * @param {{ who: string, mine?: boolean, avatar?: string }} meta
+ * @returns {{ root: HTMLElement, bubble: HTMLElement }}
+ */
+function shell(meta) {
+  const root = el('div', meta.mine ? 'msg msg--user' : 'msg')
+  const avatar = el('div', 'msg__avatar', meta.avatar ?? (meta.mine ? '🧑' : '🤖'))
+  const bubble = el('div', 'msg__bubble')
+
+  const who = el('div', 'msg__who')
+  who.appendChild(el('span', undefined, meta.who))
+  who.appendChild(el('span', 'msg__time', clockLabel(Date.now())))
+  bubble.appendChild(who)
+
+  append(root, avatar, bubble)
+  return { root, bubble }
+}
+
+/**
+ * スレッドに積む。
+ *
+ * **積む前に、それまでのメッセージの操作ボタンをすべて無効化する。**
+ * 進行はサーバの `actions` に従って毎回作り直しているので、古いメッセージに
+ * 残ったボタンは既に条件を満たさない。押せてしまうと 409 を返させるだけで、
+ * 「押せるのに効かない」という最も分かりにくい状態になる。
+ */
+function push(root) {
+  const node = thread()
+  for (const stale of node.querySelectorAll('.actions button, .options button')) {
+    /** @type {HTMLButtonElement} */ (stale).disabled = true
+  }
+  node.appendChild(root)
+  scrollToEnd()
+  return root
+}
+
+/**
+ * 先輩（AI）の発言。
+ * @param {{
+ *   lead?: string,
+ *   texts?: string[],
+ *   callout?: { label: string, body: string, calm?: boolean },
+ *   nodes?: (Node|null|false)[],
+ * }} content
+ */
+export function bot(content) {
+  const { root, bubble } = shell({ who: BOT })
+  if (content.lead) bubble.appendChild(el('p', 'msg__lead', content.lead))
+  for (const text of content.texts ?? []) bubble.appendChild(el('p', 'msg__text', text))
+  if (content.callout) bubble.appendChild(callout(content.callout))
+  append(bubble, ...(content.nodes ?? []))
+  push(root)
+  return bubble
+}
+
+/**
+ * 利用者の発言。`code` はエラーテキストなど**そのまま等幅で見せたい**もの。
+ * @param {{ who: string, text?: string, code?: string }} content
+ */
+export function user(content) {
+  const { root, bubble } = shell({ who: `${content.who} (DEVELOPER)`, mine: true, avatar: '🧑' })
+  if (content.text) bubble.appendChild(el('p', 'msg__text', content.text))
+  if (content.code) bubble.appendChild(el('pre', 'msg__code', content.code))
+  push(root)
+  return bubble
+}
+
+/** @param {{ label: string, body: string, calm?: boolean }} spec */
+export function callout(spec) {
+  const box = el('div', spec.calm ? 'callout callout--calm' : 'callout')
+  box.appendChild(el('p', 'callout__label', `${spec.label}：`))
+  box.appendChild(el('p', 'callout__body', spec.body))
+  return box
+}
+
+/** 「先輩が考えている」行。返り値を `remove()` すると消える（ADR-007） */
+export function thinking() {
+  const { root, bubble } = shell({ who: BOT })
+  const line = el('div', 'thinking')
+  const dots = el('span', 'thinking__dots')
+  for (let i = 0; i < 3; i += 1) dots.appendChild(el('span'))
+  line.appendChild(dots)
+  line.appendChild(el('span', undefined, THINKING[Math.floor(Math.random() * THINKING.length)]))
+  bubble.appendChild(line)
+  push(root)
+  return {
+    remove() {
+      root.remove()
+    },
+  }
+}
+
+/**
+ * 選択肢。**押した後は全部 disabled にする。**
+ * 連打による二重回答はサーバの冪等性で防いでいるが（api-spec.md §4）、
+ * 押せてしまう見た目のままだと「効いていない」と読める。
+ *
+ * @param {{id: string, label: string}[]} options
+ * @param {(id: string) => void} onPick
+ */
+export function optionList(options, onPick) {
+  const list = el('div', 'options')
+  const buttons = options.map((option) =>
+    button(`${option.id.toUpperCase()}. ${option.label}`, 'option', () => {
+      for (const b of buttons) b.disabled = true
+      onPick(option.id)
+    }),
+  )
+  append(list, ...buttons)
+  return list
+}
+
+/**
+ * 行動ボタンの並び。
+ * @param {{label: string, onClick: () => void, primary?: boolean, disabled?: boolean}[]} specs
+ */
+export function actionBar(specs) {
+  const bar = el('div', 'actions')
+  for (const spec of specs) {
+    const b = button(spec.label, spec.primary ? 'btn btn--primary btn--small' : 'btn', spec.onClick)
+    b.disabled = Boolean(spec.disabled)
+    bar.appendChild(b)
+  }
+  return bar
+}
+
+/** ヒントの積み上げ表示。段階が進んでも履歴として残す */
+export function hintList(hints) {
+  const list = el('ul', 'hint-list')
+  for (const hint of hints) {
+    const li = el('li', 'hint-list__item')
+    li.appendChild(el('span', 'hint-list__level', `Lv${hint.level}`))
+    li.appendChild(el('span', undefined, hint.body))
+    list.appendChild(li)
+  }
+  return list
+}
