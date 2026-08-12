@@ -1,8 +1,28 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { serve } from '@hono/node-server'
 import { app } from './app'
 import { logConfigIssues } from './config'
+import { setStaticAssetLoader } from './static'
 
 logConfigIssues()
+
+/**
+ * ローカルでは静的ファイルを**リクエストごとにディスクから読む**（ADR-012）。
+ *
+ * HTML / CSS / JS を編集したら、ビルドせずにリロードだけで反映される。
+ * この読み込みは `local.ts` にだけ置く。ZIP のエントリポイントは `index.ts` なので、
+ * **Lambda 側のバンドルに `node:fs` が入らない。**
+ */
+setStaticAssetLoader((name) => {
+  const path = fileURLToPath(new URL(`../../web/public/${name}`, import.meta.url))
+  try {
+    return readFileSync(path, 'utf8')
+  } catch {
+    console.warn(`静的ファイルが読めません: ${path}`)
+    return null
+  }
+})
 
 /**
  * ローカル起動（Lambda なし）。デプロイ前の動作確認に使う（NFR-Q3）。

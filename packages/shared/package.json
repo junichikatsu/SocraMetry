@@ -1,0 +1,19 @@
+{
+  "name": "@socrametry/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "FE/BE 共有の公開型と Zod スキーマ（= API 契約）",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

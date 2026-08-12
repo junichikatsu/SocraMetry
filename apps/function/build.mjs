@@ -39,14 +39,16 @@ await build({
   format: 'cjs', // ★ enebular の要件（要件 2）
   minify: true,
   sourcemap: false,
-  // 静的ファイルをバンドルに文字列として取り込む（ADR-012）
-  loader: { '.html': 'text', '.css': 'text' },
   define: {
     __BUILD_INFO__: JSON.stringify({
       version: zipPackageJson.version,
       commit,
       builtAt: new Date().toISOString(),
     }),
+    // フロントエンドを文字列として同梱する（ADR-012）。
+    // text ローダを使わないのは、`app.js` のために '.js': 'text' を指定すると
+    // バンドル対象の依存パッケージまで文字列になってしまうため
+    __STATIC_ASSETS__: JSON.stringify(await readStaticAssets()),
   },
 })
 
@@ -83,6 +85,26 @@ if (size > MAX_ZIP_BYTES) {
 console.log(`${ZIP_PATH}  ${(size / 1024).toFixed(1)} KB  (commit: ${commit})`)
 
 // ---------------------------------------------------------------------------
+
+/**
+ * `apps/web/public/` の中身を読む（ADR-012）。
+ * **1 つでも欠けたらビルドを失敗させる。** 画面が白いまま
+ * デプロイされる方が、原因を追う時間の損失が大きい。
+ */
+async function readStaticAssets() {
+  const names = ['index.html', 'styles.css', 'app.js']
+  const entries = await Promise.all(
+    names.map(async (name) => {
+      const path = `../web/public/${name}`
+      try {
+        return [name, await readFile(path, 'utf8')]
+      } catch {
+        throw new Error(`静的ファイルが見つかりません: ${path}`)
+      }
+    }),
+  )
+  return Object.fromEntries(entries)
+}
 
 /** CI では GITHUB_SHA、ローカルでは git から取る。どちらも無ければ unknown */
 function resolveCommit() {

@@ -2,10 +2,10 @@
 
 | 項目 | 内容 |
 |---|---|
-| ドキュメント版数 | v0.2 |
+| ドキュメント版数 | v0.3 |
 | 作成日 | 2026-08-09 |
-| 更新日 | 2026-08-10 |
-| 主な変更 | §3 の事前セットアップを v0.1 の実態に修正（プロジェクト 1 / テーブル 5 / キー定義を明記） |
+| 更新日 | 2026-08-11 |
+| 主な変更 | **自動デプロイの記述を実態に修正。** v0.1 は手動実行のみで、push トリガーは未有効 |
 | 参照 | [ZIP ファイルデプロイ](https://docs.enebular.com/ja/GetStarted/ZIPFileDeployment.html) / [enebular CLI](https://www.npmjs.com/package/@uhuru/enebular-cli) / [GitHub Actions 自動化](https://blog.enebular.com/function/github-actions-enebular-cli-automation/) |
 
 ---
@@ -25,11 +25,16 @@
 
 **v0.1 は development の 1 プロジェクトのみ**（F19 Won't）。
 
-| ブランチ / イベント | デプロイ先 | 版 |
-|---|---|---|
-| `main` への push | development | v0.1 |
-| `v*` タグの push | production | v0.2 以降 |
-| 手動実行 (`workflow_dispatch`) | 選択したプロジェクト | — |
+| ブランチ / イベント | デプロイ先 | 版 | 状態 |
+|---|---|---|---|
+| 手動実行 (`workflow_dispatch`) | 選択した Environment | v0.1 | ✅ **これだけが有効** |
+| `main` への push | development | v0.2 以降 | ⬜ ワークフロー内でコメントアウト |
+| `v*` タグの push | production | v0.2 以降 | ⬜ 同上 |
+
+> **v0.1 は手動実行のみに絞っている。** フロントエンドが暫定のため、
+> 意図しないタイミングでデモ環境が入れ替わるのを避ける。
+> 正式なフロントエンドが載って 1 画面が通った時点で push トリガーを有効化する
+> （[deploy-function.yml](../.github/workflows/deploy-function.yml) のコメントを外すだけ）。
 
 ---
 
@@ -307,7 +312,7 @@ ZIP は決定的にビルドされるため、同じコミットからは同じ 
 | 6 | `envVars` に必要なテーブル ID と鍵が設定されているか | 自動 |
 | 7 | `SESSION_JWT_SECRET` と `INVITE_CODE` が既定値（`change-me`）のままでないか | 自動 |
 | 8 | `connectDataStore` が有効か | 手動 |
-| 9 | `OPS_LOG_ENABLED` が `true` か（v0.1 はコスト実測のため有効にする / F11） | 手動 |
+| 9 | `OPS_LOG_ENABLED` が `true` か（v0.1 はコスト実測のため有効にする / F11）<br>→ **`GET /v1/health` の `limits.opsLog` で確認できる。**false だと課金されるのに記録が残らず、`GET /cost` が MOCK と見分けられなくなる | 手動 |
 | 10 | **`MOCK_MODE` が意図した値になっているか**（本番で `true` のまま公開しない） | 手動 |
 | 11 | HTTP トリガーのパスが enebular インスタンス内で一意か | 手動 |
 | 12 | `timeout` が API 仕様の想定レイテンシ（最大 20 秒）より長いか | 手動 |

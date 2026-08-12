@@ -11,7 +11,12 @@
     "build:zip": "node build.mjs"
   },
   "dependencies": {
-    "hono": "^4.10.3"
+    "@socrametry/core": "workspace:*",
+    "@socrametry/datastore": "workspace:*",
+    "@socrametry/llm": "workspace:*",
+    "@socrametry/shared": "workspace:*",
+    "hono": "^4.10.3",
+    "zod": "^4.1.13"
   },
   "devDependencies": {
     "@hono/node-server": "^1.19.9",

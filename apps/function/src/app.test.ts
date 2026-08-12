@@ -20,6 +20,65 @@ describe('GET /v1/health', () => {
 
 // CI のスモークテストがこの configOk を見て落ちる。
 // 設定漏れがデプロイのたびに自動で検出される仕組み。
+// 環境変数とコードの既定値のどちらが効いているかは、外から見えないと切り分けられない。
+// 実際に「環境変数を消したのに古い値が効いたまま」で LLM 呼び出しを無駄にした。
+describe('GET /v1/health の出力上限', () => {
+  it('実際に効いている max_tokens を返す', async () => {
+    const res = await app.request('/v1/health')
+    const body = (await res.json()) as { limits: Record<string, number> }
+
+    expect(body.limits.diagnoser).toBe(1600)
+    expect(body.limits.questioner).toBe(900)
+  })
+
+  it('Gate B の段階数も返す（5 軸のうち何軸が採点対象かが決まる）', async () => {
+    const res = await app.request('/v1/health')
+    const body = (await res.json()) as { limits: Record<string, number> }
+    expect(body.limits.stages).toBe(5)
+
+    process.env['DEMO_MAX_STAGES'] = '3'
+    const demo = await app.request('/v1/health')
+    const demoBody = (await demo.json()) as { limits: Record<string, number> }
+    expect(demoBody.limits.stages).toBe(3)
+    delete process.env['DEMO_MAX_STAGES']
+  })
+
+  it('環境変数で上書きされていればその値が出る', async () => {
+    process.env['MAX_TOKENS_DIAGNOSER'] = '800'
+    const res = await app.request('/v1/health')
+    const body = (await res.json()) as { limits: Record<string, number> }
+
+    expect(body.limits.diagnoser).toBe(800)
+    delete process.env['MAX_TOKENS_DIAGNOSER']
+  })
+
+  /**
+   * コスト計測に効く 2 つの設定。**どちらも欠けると計測が静かに壊れる。**
+   *
+   * - `usdJpyRate`: 実行環境 165 / コード既定 150 でずれ、設計書の円が
+   *   150 換算と 165 換算で混在した
+   * - `opsLog`: false だと課金されるのに記録が残らず、`GET /cost` は
+   *   MOCK と同じ「呼び出し 0 件」を返して見分けがつかない
+   *
+   * 出すのをやめると同じ事故が再発するため、テストで固定する。
+   */
+  it('円換算レートと ops_logs の有効／無効を返す', async () => {
+    const res = await app.request('/v1/health')
+    const body = (await res.json()) as {
+      limits: { usdJpyRate: number; opsLog: boolean }
+    }
+
+    expect(body.limits.usdJpyRate).toBe(165)
+    expect(typeof body.limits.opsLog).toBe('boolean')
+
+    process.env['USD_JPY_RATE'] = '150'
+    const overridden = await app.request('/v1/health')
+    const overriddenBody = (await overridden.json()) as { limits: { usdJpyRate: number } }
+    expect(overriddenBody.limits.usdJpyRate).toBe(150)
+    delete process.env['USD_JPY_RATE']
+  })
+})
+
 describe('GET /v1/health の設定チェック', () => {
   const REQUIRED = {
     MOCK_MODE: 'true',

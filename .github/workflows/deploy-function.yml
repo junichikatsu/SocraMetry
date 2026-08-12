@@ -1,9 +1,10 @@
 # ============================================================================
 #  SocraMetry — enebular クラウド実行環境への ZIP デプロイ
 #
-#  現状: apps/function は GET /v1/health のみの骨格です。
-#        アプリ本体が入るまでトリガーは workflow_dispatch のみに絞っています。
-#        v0.1 の導線が通った時点で、下の push トリガーを有効化してください。
+#  現状: v0.1 のバックエンド API は実装済みです（フロントエンドは未実装）。
+#        トリガーは workflow_dispatch のみに絞っています。
+#        自動デプロイにするなら、フロントを載せて 1 画面が通ったあとに
+#        下の push トリガーを有効化してください（意図しないデプロイを避けるため）。
 #
 #  仕様: docs/deployment.md
 # ============================================================================
@@ -190,10 +191,25 @@ jobs:
         run: |
           set -euo pipefail
 
+          # enebular の制約: --name は 1〜30 文字の英数字・アンダースコア・ハイフンのみ。
+          # ブランチ名（feat/xxx）やタグ（v1.0.0）はそのままでは通らないため、
+          # **入力を弾くのではなく整形する。** ここで失敗させると、ZIP のデプロイは
+          # 済んでいるのにバージョン記録とスモークテストだけが実行されない状態になり、
+          # 「デプロイは成功したのか」が分かりにくい壊れ方をする。
+          safe_name="$(printf '%s' "$VERSION_NAME" \
+            | tr -c 'A-Za-z0-9_-' '-' \
+            | sed 's/^-*//; s/-*$//' \
+            | cut -c1-30)"
+          # 記号だけの入力は整形後に空になるため、既定値へ落とす
+          [ -n "$safe_name" ] || safe_name="manual"
+          if [ "$safe_name" != "$VERSION_NAME" ]; then
+            echo "バージョン名を enebular の制約に合わせて整形しました: $VERSION_NAME → $safe_name"
+          fi
+
           enebular add file-version \
             --project-id "$PROJECT_ID" \
             --asset-id "$FILE_ASSET_ID" \
-            --name "$VERSION_NAME" \
+            --name "$safe_name" \
             --comment "$VERSION_COMMENT ($GITHUB_SHA)" \
             --json
 
