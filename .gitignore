@@ -5,6 +5,8 @@ node_modules/
 # build output
 dist/
 build/
+# フロントエンドのバンドル成果物。編集先は apps/web/src/（ADR-013 改訂）
+apps/web/public/app.js
 socrametry-function.zip
 .next/
 out/

@@ -10,6 +10,7 @@
   },
   "scripts": {
     "dev": "pnpm --filter @socrametry/function dev",
+    "dev:web": "pnpm --filter @socrametry/web dev",
     "build": "turbo run build",
     "build:zip": "pnpm --filter @socrametry/function build:zip",
     "typecheck": "turbo run typecheck",

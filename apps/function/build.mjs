@@ -12,6 +12,7 @@ import archiver from 'archiver'
 import { createWriteStream } from 'node:fs'
 import { cp, mkdir, readFile, rm, stat } from 'node:fs/promises'
 import { execFileSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 
 const OUT_DIR = 'build'
 const ZIP_PATH = 'socrametry-function.zip'
@@ -24,6 +25,12 @@ if (zipPackageJson.type === 'module') {
 }
 
 const commit = resolveCommit()
+
+// ── 0) フロントエンドを先にバンドルする ────────────────────────────────────
+// `apps/web/public/app.js` は生成物（ADR-013 改訂）。ここで作らずに読むと、
+// **古い app.js がそのまま ZIP に入る。**CI もデプロイもこのスクリプトを
+// 直接呼ぶ（turbo を経由しない）ため、依存関係ではなく明示的に呼ぶ。
+buildWeb()
 
 await rm(OUT_DIR, { recursive: true, force: true })
 await rm(ZIP_PATH, { force: true })
@@ -104,6 +111,14 @@ async function readStaticAssets() {
     }),
   )
   return Object.fromEntries(entries)
+}
+
+/** `apps/web` のバンドルを実行する。失敗したらここで止める */
+function buildWeb() {
+  execFileSync(process.execPath, ['build.mjs'], {
+    cwd: fileURLToPath(new URL('../web/', import.meta.url)),
+    stdio: 'inherit',
+  })
 }
 
 /** CI では GITHUB_SHA、ローカルでは git から取る。どちらも無ければ unknown */

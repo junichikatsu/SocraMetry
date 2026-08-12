@@ -70,6 +70,22 @@ importers:
         specifier: ^3.2.4
         version: 3.2.7(@types/node@22.20.1)(tsx@4.23.11)
 
+  apps/web:
+    dependencies:
+      '@socrametry/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+    devDependencies:
+      '@socrametry/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      esbuild:
+        specifier: ^0.25.11
+        version: 0.25.12
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
   packages/core:
     dependencies:
       '@socrametry/shared':
