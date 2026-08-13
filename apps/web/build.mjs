@@ -14,8 +14,9 @@
 import { build, context } from 'esbuild'
 import { copyFileSync } from 'node:fs'
 
-// ロゴの原本は assets/ に置く（public/ は配信物。app.js と同じく git 管理しない）
+// 画像の原本は assets/ に置く（public/ は配信物。app.js と同じく git 管理しない）
 copyFileSync('assets/logo.png', 'public/logo.png')
+copyFileSync('assets/robo.png', 'public/robo.png')
 
 const options = {
   entryPoints: ['src/main.js'],

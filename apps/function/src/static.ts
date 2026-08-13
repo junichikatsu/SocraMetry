@@ -24,10 +24,10 @@ import { Hono } from 'hono'
  * 統一し（`__STATIC_ASSETS__` は JSON なので文字列しか持てない）、
  * 配信の直前にだけバイトへ戻す。
  */
-const ASSETS = ['index.html', 'styles.css', 'app.js', 'logo.png'] as const
+const ASSETS = ['index.html', 'styles.css', 'app.js', 'logo.png', 'robo.png'] as const
 export type AssetName = (typeof ASSETS)[number]
 
-const BINARY_ASSETS: ReadonlySet<AssetName> = new Set<AssetName>(['logo.png'])
+const BINARY_ASSETS: ReadonlySet<AssetName> = new Set<AssetName>(['logo.png', 'robo.png'])
 
 /**
  * `index.html` の中でアセットの版を差し込む場所。
@@ -50,6 +50,7 @@ const CONTENT_TYPES: Record<AssetName, string> = {
   'styles.css': 'text/css; charset=utf-8',
   'app.js': 'text/javascript; charset=utf-8',
   'logo.png': 'image/png',
+  'robo.png': 'image/png',
 }
 
 /** ビルド時に埋め込まれた中身。tsx でのローカル起動時は定義されない */
@@ -73,7 +74,10 @@ export function setStaticAssetLoader(fn: AssetLoader | null): void {
 
 function assetBody(name: AssetName): string | null {
   const body = loader?.(name) ?? embedded[name] ?? null
-  if (body === null || name !== 'index.html') return body
+  // 版の差し込みはテキストのみ。index.html（CSS / JS / 画像の参照）に加えて、
+  // app.js も対象にする（JS が組み立てる <img>（ボットアイコン等）が使う）。
+  // バイナリは base64 文字列なので置換の対象にしない
+  if (body === null || (name !== 'index.html' && name !== 'app.js')) return body
   // ローカル（ビルドなし）では毎回変える。編集がすぐ反映される方を取る
   return body.replaceAll(VERSION_TOKEN, assetVersion())
 }

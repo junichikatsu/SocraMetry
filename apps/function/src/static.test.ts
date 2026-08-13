@@ -15,6 +15,7 @@ const FAKE: Record<AssetName, string> = {
   'app.js': 'console.log("ok")',
   // バイナリは base64 で持つ（"PNG..." のダミーバイト列）
   'logo.png': Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).toString('base64'),
+  'robo.png': Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).toString('base64'),
 }
 
 afterEach(() => {
@@ -63,7 +64,15 @@ describe('GET /', () => {
     expect(versions[0]).toBe(versions[1])
   })
 
-  it('版を差し込むのは HTML だけ（CSS / JS の中身は書き換えない）', async () => {
+  it('app.js にも版を差し込む（JS が組み立てる <img> が使う）', async () => {
+    setStaticAssetLoader(() => "icon.src = 'robo.png?v=__ASSET_VERSION__'")
+    const js = await (await app.request('/app.js')).text()
+
+    expect(js).not.toContain('__ASSET_VERSION__')
+    expect(js).toMatch(/robo\.png\?v=.+'/)
+  })
+
+  it('版を差し込むのは HTML と JS だけ（CSS の中身は書き換えない）', async () => {
     setStaticAssetLoader(() => 'content: "__ASSET_VERSION__"')
     const css = await (await app.request('/styles.css')).text()
 
@@ -80,6 +89,7 @@ describe('各アセット', () => {
       'styles.css': 'text/css',
       'app.js': 'text/javascript',
       'logo.png': 'image/png',
+      'robo.png': 'image/png',
     }
     for (const name of ASSETS) {
       const res = await app.request(`/${name}`)

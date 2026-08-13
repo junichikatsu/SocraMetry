@@ -51,7 +51,22 @@ function scrollToNew(root) {
  */
 function shell(meta) {
   const root = el('div', meta.mine ? 'msg msg--user' : 'msg')
-  const avatar = el('div', 'msg__avatar', meta.avatar ?? (meta.mine ? '🧑' : '🤖'))
+
+  /**
+   * SOCRA_BOT のアイコンは画像（assets/robo.png）。
+   * `?v=` はサーバが配信時に app.js の中でも置換する（static.ts）。
+   * これが無いと、アイコンを差し替えても前段のキャッシュが 4 時間残る。
+   */
+  const avatar = el('div', meta.mine ? 'msg__avatar' : 'msg__avatar msg__avatar--bot')
+  if (meta.mine) {
+    avatar.textContent = meta.avatar ?? '🧑'
+  } else {
+    const icon = /** @type {HTMLImageElement} */ (el('img', 'msg__avatar-img'))
+    icon.src = 'robo.png?v=__ASSET_VERSION__'
+    icon.alt = ''
+    avatar.appendChild(icon)
+  }
+
   const bubble = el('div', 'msg__bubble')
 
   const who = el('div', 'msg__who')

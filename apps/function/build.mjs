@@ -99,7 +99,7 @@ console.log(`${ZIP_PATH}  ${(size / 1024).toFixed(1)} KB  (commit: ${commit})`)
  * デプロイされる方が、原因を追う時間の損失が大きい。
  */
 async function readStaticAssets() {
-  const names = ['index.html', 'styles.css', 'app.js', 'logo.png']
+  const names = ['index.html', 'styles.css', 'app.js', 'logo.png', 'robo.png']
   const entries = await Promise.all(
     names.map(async (name) => {
       const path = `../web/public/${name}`

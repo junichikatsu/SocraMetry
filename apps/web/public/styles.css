@@ -424,6 +424,10 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   font-size: 18px;
 }
 
+/* SOCRA_BOT のアイコン。画像が円形と塗りを持つので、下地の色は敷かない */
+.msg__avatar--bot { background: transparent; }
+.msg__avatar-img { width: 100%; height: 100%; object-fit: contain; }
+
 .msg__bubble {
   flex: 1;
   min-width: 0;
