@@ -85,6 +85,7 @@
   .tile__value { font-size: 27px; font-weight: 800; letter-spacing: -.02em; }
   .tile__value--up { color: #0f766e; }
   .tile__sub { color: var(--ink-4); font-size: 11px; }
+  .spark { width: 56px; height: 18px; margin-left: 8px; vertical-align: baseline; }
 
   .cards { display: grid; grid-template-columns: 380px 1fr; gap: 14px; align-items: start; }
   .card { padding: 18px 20px; border: 1px solid var(--line-soft); border-radius: var(--r-lg); background: #fff; box-shadow: var(--shadow-sm); }
@@ -160,16 +161,16 @@
 
       <div class="tiles">
         <div class="tile"><span class="tile__label">アクティブメンバー</span><strong class="tile__value">21<small style="font-size:15px;color:var(--ink-4)"> / 24</small></strong><span class="tile__sub">今月 1 回以上セッション</span></div>
-        <div class="tile"><span class="tile__label">組織の自力解決率</span><strong class="tile__value">64.2%</strong><span class="tile__sub">Gate A + B。完了 152 件から算出</span></div>
-        <div class="tile"><span class="tile__label">平均成長率</span><strong class="tile__value tile__value--up">+8.4pt</strong><span class="tile__sub">直近 5 件 vs 過去 5 件の 5 軸平均</span></div>
-        <div class="tile"><span class="tile__label">詰まり解消の中央値</span><strong class="tile__value">14<small style="font-size:15px;color:var(--ink-4)"> 分</small></strong><span class="tile__sub">開始 → 到達までの実作業時間</span></div>
-        <div class="tile"><span class="tile__label">今月の LLM 実測コスト</span><strong class="tile__value">¥1,294</strong><span class="tile__sub">208 セッション ・ 1 件あたり ¥6.2</span></div>
+        <div class="tile"><span class="tile__label">組織の自力解決率</span><strong class="tile__value">64.2%<svg class="spark" viewBox="0 0 60 18"><polyline points="0,14 12,12.5 24,13 36,9.5 48,7 60,4" fill="none" stroke="#0f766e" stroke-width="2"/></svg></strong><span class="tile__sub">前月 58.9% → 今月。完了 152 件から算出</span></div>
+        <div class="tile"><span class="tile__label">平均成長率</span><strong class="tile__value tile__value--up">+8.4pt</strong><span class="tile__sub">通算 10 件以上の <strong>17 名</strong>の平均（7 名は算出前）</span></div>
+        <div class="tile"><span class="tile__label">詰まり解消の中央値</span><strong class="tile__value">14<small style="font-size:15px;color:var(--ink-4)"> 分</small></strong><span class="tile__sub">導入前 41 分 → 14 分。短縮 ≈68 時間/月</span></div>
+        <div class="tile"><span class="tile__label">今月の LLM 実測コスト</span><strong class="tile__value">¥1,294</strong><span class="tile__sub">208 セッション ・ 1 件 ¥6.2（左の短縮と対で ROI）</span></div>
       </div>
 
       <div class="cards">
         <div class="card">
           <h3 class="card__title">組織の 5 軸平均</h3>
-          <p class="card__note">完了 152 件の平均。最弱は「検証」52</p>
+          <p class="card__note">Gate B 以降の <strong>89 件</strong>の平均。最弱は「検証」52<br />※ Gate A は設問を解かず 5 軸が参考値のため除外（evaluation-model.md §4.6）</p>
           <div class="radar">
             <svg viewBox="-40 0 380 300" role="img">
               <polygon points="150,128 170.9,143.2 162.9,167.8 137.1,167.8 129.1,143.2" fill="none" stroke="#eef2f7"/>
@@ -214,16 +215,16 @@
         <p class="card__note">評価の主役は総合点ではなく成長率（FR-26）。順位は表示しない（ランキングは組織設定で無効）</p>
         <div class="table-wrap">
           <table>
-            <tr><th>メンバー</th><th>今月のセッション</th><th>自力解決率</th><th>伸ばすべき軸</th><th>成長率（演習）</th><th>取り組み量</th></tr>
-            <tr><td>S. Watanabe</td><td>14 件</td><td>71.4%</td><td><span class="axis-chip">検証</span></td><td class="growth">+12.6pt</td><td>4.2 時間</td></tr>
-            <tr><td>K. Sato</td><td>9 件</td><td>55.6%</td><td><span class="axis-chip">切り分け</span></td><td class="growth">+9.1pt</td><td>3.1 時間</td></tr>
-            <tr><td>M. Suzuki</td><td>11 件</td><td>81.8%</td><td><span class="axis-chip">修正</span></td><td class="growth">+7.8pt</td><td>2.8 時間</td></tr>
-            <tr><td>R. Tanaka</td><td>6 件</td><td>50.0%</td><td><span class="axis-chip">検証</span></td><td class="growth">+6.2pt</td><td>2.4 時間</td></tr>
-            <tr><td>A. Kobayashi</td><td>8 件</td><td>62.5%</td><td><span class="axis-chip">観察</span></td><td class="growth growth--flat">+0.4pt</td><td>1.9 時間</td></tr>
+            <tr><th>メンバー</th><th>伸ばすべき軸</th><th>成長率（演習）</th><th>今月のセッション</th><th>自力解決率</th></tr>
+            <tr><td>S. Watanabe</td><td><span class="axis-chip">検証</span></td><td class="growth">+12.6pt</td><td>14 件</td><td>71.4%</td></tr>
+            <tr><td>K. Sato</td><td><span class="axis-chip">切り分け</span></td><td class="growth">+9.1pt</td><td>9 件</td><td>55.6%</td></tr>
+            <tr><td>M. Suzuki</td><td><span class="axis-chip">修正</span></td><td class="growth">+7.8pt</td><td>11 件</td><td>81.8%</td></tr>
+            <tr><td>R. Tanaka</td><td><span class="axis-chip">検証</span></td><td class="growth">+6.2pt</td><td>6 件</td><td>50.0%</td></tr>
+            <tr><td>A. Kobayashi</td><td><span class="axis-chip">観察</span></td><td class="growth growth--flat">—（通算 10 件未満）</td><td>8 件</td><td>62.5%</td></tr>
           </table>
         </div>
         <p class="footnote" style="margin-top:10px">
-          ※ 成長率は演習モード（同一問題・同一条件）のスコアのみから算出します。実務モードのスコアは本人の振り返り専用で、横比較には使いません（NFR-F2）。
+          ※ 成長率は演習モード（同一問題・同一条件）のスコアのみから算出します。実務モードのスコアは本人の振り返り専用で、横比較には使いません（NFR-F2）。<br />※ 取り組み時間は表示しません。稼働監視への転用を避けるためで、成長率の信頼度はセッション数で読みます。
         </p>
       </div>
     </div>
