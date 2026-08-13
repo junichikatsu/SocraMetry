@@ -88,6 +88,9 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   font-weight: 700;
 }
 
+/* ソクラテスの横顔（<use href="#logo-head">）。塗りは文字色を継ぐ */
+.brand__logo { width: 74%; height: 74%; fill: currentColor; }
+
 .brand__text { display: flex; flex-direction: column; line-height: 1.25; }
 .brand__name { font-size: 21px; font-weight: 800; letter-spacing: -0.01em; }
 .brand__sub { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; color: var(--ink-3); }
@@ -134,6 +137,20 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   font-size: 84px;
   font-weight: 800;
 }
+
+/* サービスロゴの完全形（紫のタイル + 白の横顔 + ワードマーク） */
+.login__mark--logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  padding: 14px 10px 16px;
+  background: var(--brand);
+  color: #fff;
+}
+.login__mark-head { width: 68%; flex: 1; min-height: 0; fill: currentColor; }
+.login__mark-name { font-size: 26px; font-weight: 800; letter-spacing: -0.01em; line-height: 1; }
 
 .login__lead { margin: 0; font-size: 34px; font-weight: 800; line-height: 1.35; letter-spacing: -0.02em; }
 .login__body { margin: 0; max-width: 48ch; color: var(--ink-2); font-size: 14px; }

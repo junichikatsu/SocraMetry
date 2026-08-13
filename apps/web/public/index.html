@@ -17,15 +17,30 @@
     値はサーバが配信時に差し込む。
 -->
 <link rel="stylesheet" href="styles.css?v=__ASSET_VERSION__" />
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%236864d9'/><text x='16' y='23' font-size='20' font-weight='700' text-anchor='middle' fill='white'>&#931;</text></svg>" />
+<!--
+  favicon: 紫の角丸タイル + ソクラテスの横顔。
+  ★ パスは下の <symbol id="logo-head"> と同じもの。data URI は外部参照できないため
+    ここだけ複製している。**片方を変えたら両方変えること。**
+-->
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%236864d9'/><path d='M32 100C32 88 30 78 31 66C32 50 36 35 47 27C57 20 71 21 78 29C83 35 85 41 85 46C85 49 84 51 82 52C85 55 88 58 88 61C88 63 86 64 84 64C86 66 86 68 85 69C84 70 83 71 82 71C87 75 89 80 88 85C87 91 82 96 76 100Z' fill='white'/></svg>" />
 </head>
 <body>
+
+<!--
+  サービスロゴ（ソクラテスの横顔）。使う場所すべてが <use> で参照する。
+  display:none でもシンボルの参照は解決される（スプライトの定石）。
+-->
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none" aria-hidden="true">
+  <symbol id="logo-head" viewBox="0 0 100 100">
+    <path d="M32 100C32 88 30 78 31 66C32 50 36 35 47 27C57 20 71 21 78 29C83 35 85 41 85 46C85 49 84 51 82 52C85 55 88 58 88 61C88 63 86 64 84 64C86 66 86 68 85 69C84 70 83 71 82 71C87 75 89 80 88 85C87 91 82 96 76 100Z" />
+  </symbol>
+</svg>
 
 <!-- ══ ログイン（未認証のときだけ全画面で出る）══════════════════════════ -->
 <div id="login" class="login" hidden>
   <section class="login__brand">
     <div class="brand">
-      <span class="brand__mark">Σ</span>
+      <span class="brand__mark"><svg class="brand__logo" viewBox="0 0 100 100" aria-hidden="true"><use href="#logo-head" /></svg></span>
       <span class="brand__text">
         <span class="brand__name">SocraMetry</span>
         <span class="brand__sub">AI DEBUG TRAINING</span>
@@ -34,7 +49,11 @@
     <div class="login__art" aria-hidden="true">
       <span class="login__glyph login__glyph--int">∫</span>
       <span class="login__glyph login__glyph--lambda">λ</span>
-      <span class="login__mark">?</span>
+      <!-- サービスロゴの完全形（タイル + 横顔 + ワードマーク） -->
+      <span class="login__mark login__mark--logo">
+        <svg class="login__mark-head" viewBox="0 0 100 100"><use href="#logo-head" /></svg>
+        <span class="login__mark-name">SocraMetry</span>
+      </span>
     </div>
     <h1 class="login__lead">問いから始まる、<br />真のデバッグ力をその手に。</h1>
     <p class="login__body">
@@ -105,7 +124,7 @@
 
   <aside class="sidebar">
     <div class="brand brand--side">
-      <span class="brand__mark">Σ</span>
+      <span class="brand__mark"><svg class="brand__logo" viewBox="0 0 100 100" aria-hidden="true"><use href="#logo-head" /></svg></span>
       <span class="brand__text">
         <span class="brand__name">SocraMetry</span>
         <span class="brand__sub">AI DEBUG TRAINING</span>
