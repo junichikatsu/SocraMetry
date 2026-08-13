@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<!--
+  トレーニングメニュー（v0.2 コンセプト / 審査・資料用の静止画モック）
+
+  ★ 実装ではない。データはすべてダミー。
+    ブラウザで開いてスクリーンショットを撮る用途（幅 1440px 想定）。
+
+  設計書との対応:
+  - 演習モード（question_bank / FR-34）と割り当て（assignments / FR-36・37）
+  - **横比較してよいのは演習モードだけ**（NFR-F2）。同一問題・同一条件だから比較が成立する
+  - 実務セッション → 問題集への変換と匿名化（FR-35）。カードの出自ラベルに反映
+  - 難易度バッジは PR #33 の training-menu-selection.png の表記（初級〜最上級）に合わせた
+
+  実装と同じデザイントークン（apps/web/public/styles.css）を使用。
+  外部 CDN・Web フォントは読まない（オフラインのブースでも開ける）。
+-->
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<title>SocraMetry — トレーニングメニュー（v0.2 コンセプト）</title>
+<style>
+  :root {
+    --brand: #6864d9; --brand-ink: #5b57c9; --brand-soft: #eef1ff;
+    --accent: #ee6793; --accent-strong: #e5537f; --accent-soft: #fdeaf1; --accent-pale: #fff5f7;
+    --mint: #b1dcd8; --mint-soft: #cfe9e5; --mint-pale: #e8f5f3;
+    --ink: #1e293b; --ink-2: #475569; --ink-3: #64748b; --ink-4: #94a3b8;
+    --line: #e2e8f0; --line-soft: #eef2f7; --bg: #f8fafc;
+    --r-md: 12px; --r-lg: 16px; --r-pill: 999px;
+    --shadow-sm: 0 1px 2px rgba(15, 23, 42, .08);
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", system-ui, sans-serif;
+    font-size: 15px; line-height: 1.7; color: var(--ink); background: #fff; overflow: hidden;
+  }
+  .app { display: grid; grid-template-columns: 300px 1fr; grid-template-rows: minmax(0,1fr); height: 100%; }
+
+  /* ── サイドバー（実装と同じ）── */
+  .sidebar { display: flex; flex-direction: column; gap: 8px; padding: 26px 22px; background: var(--mint); }
+  .brand { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+  .brand__mark { width: 46px; height: 46px; }
+  .brand__name { font-size: 21px; font-weight: 800; letter-spacing: -.01em; display: block; line-height: 1.25; }
+  .brand__sub { font-size: 11px; font-weight: 600; letter-spacing: .08em; color: var(--ink-3); }
+  .nav { display: flex; flex-direction: column; gap: 4px; }
+  .nav__item { display: flex; align-items: center; gap: 12px; padding: 11px 16px; border: 0; border-radius: var(--r-md); background: transparent; color: var(--ink-2); font-size: 14px; font-weight: 600; text-align: left; }
+  .nav__item.is-active { background: #fff; color: var(--brand-ink); box-shadow: var(--shadow-sm); }
+  .nav__icon { width: 18px; text-align: center; font-size: 15px; }
+  .sidebar__foot { margin-top: auto; display: flex; flex-direction: column; gap: 10px; }
+  .me { display: flex; align-items: center; gap: 12px; }
+  .me__avatar { display: grid; place-items: center; width: 38px; height: 38px; border-radius: var(--r-pill); background: var(--brand); color: #fff; font-size: 11px; font-weight: 700; }
+  .me__name { font-size: 14px; font-weight: 700; display: block; line-height: 1.3; }
+  .me__mail { color: var(--ink-3); font-size: 11px; }
+  .logout { padding: 5px 12px; border: 1px solid var(--line); border-radius: var(--r-pill); background: #fff; color: var(--ink-2); font-size: 12px; font-weight: 700; text-align: center; }
+
+  /* ── 本体 ── */
+  .main { display: flex; flex-direction: column; min-width: 0; }
+  .topbar { display: flex; align-items: center; gap: 12px; height: 66px; padding: 0 26px; border-bottom: 1px solid var(--line-soft); flex-shrink: 0; }
+  .topbar__title { font-size: 19px; font-weight: 800; }
+  .chip { padding: 4px 12px; border-radius: var(--r-pill); background: var(--brand-soft); color: var(--brand-ink); font-size: 11px; font-weight: 700; }
+  .chip--warn { background: var(--accent-soft); color: #d9457a; }
+  .chip--live { background: var(--mint-pale); color: #0f766e; }
+  .spacer { flex: 1; }
+  .math { color: var(--ink-4); font-size: 15px; }
+
+  .view { padding: 26px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
+  h2 { margin: 0; font-size: 22px; font-weight: 800; }
+  .lead { margin: -10px 0 0; color: var(--ink-3); font-size: 13px; }
+
+  /* 割り当てバナー（assignments / FR-36）*/
+  .assign {
+    display: flex; align-items: center; gap: 16px; padding: 16px 20px;
+    border: 1px solid var(--mint-soft); border-radius: var(--r-lg); background: var(--mint-pale);
+  }
+  .assign__label { flex-shrink: 0; padding: 4px 12px; border-radius: var(--r-pill); background: #0f766e; color: #fff; font-size: 11px; font-weight: 800; }
+  .assign__text { margin: 0; font-size: 14px; font-weight: 700; }
+  .assign__text small { display: block; font-weight: 500; color: var(--ink-3); font-size: 12px; }
+  .assign__cta { margin-left: auto; flex-shrink: 0; padding: 10px 22px; border-radius: var(--r-pill); background: var(--accent); color: #fff; font-size: 14px; font-weight: 700; }
+
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .pj { display: flex; flex-direction: column; gap: 10px; padding: 18px 20px; border: 1px solid var(--line-soft); border-radius: var(--r-lg); background: #fff; box-shadow: var(--shadow-sm); }
+  .pj__head { display: flex; align-items: center; gap: 8px; }
+  .pj__title { margin: 0; font-size: 15px; font-weight: 800; flex: 1; }
+  .badge { flex-shrink: 0; padding: 2px 10px; border-radius: var(--r-pill); font-size: 11px; font-weight: 700; }
+  .badge--beginner { background: var(--brand-soft); color: var(--brand-ink); }
+  .badge--middle { background: #fff7ed; color: #b45309; }
+  .badge--advanced { background: var(--accent-soft); color: #d9457a; }
+  .badge--top { background: #fee2e2; color: #b91c1c; }
+  .pj__desc { margin: 0; color: var(--ink-2); font-size: 13px; min-height: 3.4em; }
+  .pj__meta { display: flex; gap: 14px; color: var(--ink-4); font-size: 12px; }
+  .pj__meta strong { color: var(--ink-2); font-weight: 700; }
+  .pj__foot { display: flex; align-items: center; gap: 10px; margin-top: 2px; }
+  .pj__origin { color: var(--ink-4); font-size: 11px; }
+  .pj__cta { margin-left: auto; padding: 8px 20px; border-radius: var(--r-pill); background: var(--accent); color: #fff; font-size: 13px; font-weight: 700; }
+  .pj__cta--done { background: var(--bg); color: var(--ink-3); box-shadow: inset 0 0 0 1px var(--line); }
+  .stars { color: var(--accent-strong); letter-spacing: 2px; }
+  .footnote { margin: 0; color: var(--ink-4); font-size: 11.5px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <svg class="brand__mark" viewBox="0 0 100 100" aria-hidden="true"><rect width="100" height="100" rx="22" fill="#6864d9"/><path d="M32 100C32 88 30 78 31 66C32 50 36 35 47 27C57 20 71 21 78 29C83 35 85 41 85 46C85 49 84 51 82 52C85 55 88 58 88 61C88 63 86 64 84 64C86 66 86 68 85 69C84 70 83 71 82 71C87 75 89 80 88 85C87 91 82 96 76 100Z" fill="#fff"/></svg>
+      <span><span class="brand__name">SocraMetry</span><span class="brand__sub">AI DEBUG TRAINING</span></span>
+    </div>
+    <nav class="nav">
+      <button class="nav__item"><span class="nav__icon">＋</span>新規セッション</button>
+      <button class="nav__item"><span class="nav__icon">▤</span>セッション一覧</button>
+      <button class="nav__item"><span class="nav__icon">⌕</span>検索</button>
+      <button class="nav__item is-active"><span class="nav__icon">▦</span>トレーニングメニュー</button>
+      <button class="nav__item"><span class="nav__icon">▥</span>ダッシュボード</button>
+      <button class="nav__item"><span class="nav__icon">⚙</span>設定</button>
+    </nav>
+    <div class="sidebar__foot">
+      <div class="me">
+        <span class="me__avatar">DEV</span>
+        <span><span class="me__name">S. Watanabe</span><span class="me__mail">watanabe@example.com</span></span>
+      </div>
+      <div class="logout">ログアウト</div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <span class="topbar__title">SocraMetry</span>
+      <span class="chip">トレーニングメニュー・演習モード</span>
+      <span class="chip chip--warn">v0.2 コンセプト — データはダミー</span>
+      <span class="spacer"></span>
+      <span class="math">∫ ∂x = λ</span>
+      <span class="chip chip--live">AI: オンライン</span>
+    </header>
+
+    <div class="view">
+      <h2>トレーニングメニュー</h2>
+      <p class="lead">演習モード — 全員が同じ問題・同じ条件で挑む。だから横比較できるスコアになる（実務モードとの違い）</p>
+
+      <!-- 管理者からの割り当て（assignments / FR-36・37）-->
+      <div class="assign">
+        <span class="assign__label">割り当て</span>
+        <p class="assign__text">
+          「非同期処理の切り分け」 — 期限 8/22（あと 9 日）
+          <small>開発部の今月の弱点「検証」に合わせて管理者が割り当てました ・ 完了 7 / 24 名</small>
+        </p>
+        <span class="assign__cta">この演習を始める →</span>
+      </div>
+
+      <div class="grid">
+        <div class="pj">
+          <div class="pj__head"><h3 class="pj__title">非同期処理の切り分け</h3><span class="badge badge--middle">中級</span></div>
+          <p class="pj__desc">API 応答前の状態を見落とすと何が起きるか。undefined の出所を、推測ではなく手順で辿る。</p>
+          <div class="pj__meta"><span>挑戦 <strong>12 名</strong></span><span>平均到達 <strong>Gate B</strong></span><span>中央値 <strong>16 分</strong></span></div>
+          <div class="pj__foot"><span class="pj__origin">出自: 実務セッションから変換（匿名化済み）</span><span class="pj__cta">挑戦する</span></div>
+        </div>
+
+        <div class="pj">
+          <div class="pj__head"><h3 class="pj__title">バックエンド API 改修</h3><span class="badge badge--advanced">上級</span></div>
+          <p class="pj__desc">コネクションプールの枯渇。クローズ漏れか設定ミスか、トランザクション量から切り分ける。</p>
+          <div class="pj__meta"><span>挑戦 <strong>8 名</strong></span><span>平均到達 <strong>Gate B</strong></span><span>中央値 <strong>21 分</strong></span></div>
+          <div class="pj__foot"><span class="pj__origin">あなたの記録: <span class="stars">★★</span>（Gate B）</span><span class="pj__cta pj__cta--done">再挑戦</span></div>
+        </div>
+
+        <div class="pj">
+          <div class="pj__head"><h3 class="pj__title">リソースリーク検出</h3><span class="badge badge--top">最上級</span></div>
+          <p class="pj__desc">徐々に遅くなるサービス。メトリクスの読み方から、リークの発生源を仮説検証で特定する。</p>
+          <div class="pj__meta"><span>挑戦 <strong>6 名</strong></span><span>平均到達 <strong>Gate C</strong></span><span>中央値 <strong>28 分</strong></span></div>
+          <div class="pj__foot"><span class="pj__origin">出自: 問題集（組織の資産）</span><span class="pj__cta">挑戦する</span></div>
+        </div>
+
+        <div class="pj">
+          <div class="pj__head"><h3 class="pj__title">フロントエンド状態管理</h3><span class="badge badge--beginner">初級</span></div>
+          <p class="pj__desc">押しても変わらないボタン。イベントと再描画の間で何が起きているかを観察から始める。</p>
+          <div class="pj__meta"><span>挑戦 <strong>15 名</strong></span><span>平均到達 <strong>Gate A</strong></span><span>中央値 <strong>9 分</strong></span></div>
+          <div class="pj__foot"><span class="pj__origin">あなたの記録: <span class="stars">★★★</span>（Gate A）</span><span class="pj__cta pj__cta--done">再挑戦</span></div>
+        </div>
+
+        <div class="pj">
+          <div class="pj__head"><h3 class="pj__title">N+1 クエリ退治</h3><span class="badge badge--middle">中級</span></div>
+          <p class="pj__desc">一覧画面だけ遅い。ログの読み方と、遅さの「形」から原因のクエリを絞り込む。</p>
+          <div class="pj__meta"><span>挑戦 <strong>5 名</strong></span><span>平均到達 <strong>Gate B</strong></span><span>中央値 <strong>18 分</strong></span></div>
+          <div class="pj__foot"><span class="pj__origin">出自: 問題集（組織の資産）</span><span class="pj__cta">挑戦する</span></div>
+        </div>
+
+        <div class="pj">
+          <div class="pj__head"><h3 class="pj__title">型エラーの本当の出所</h3><span class="badge badge--beginner">初級</span></div>
+          <p class="pj__desc">エラーが指す行に原因は無い。型の流れを上流へ遡る、切り分けの基本形。</p>
+          <div class="pj__meta"><span>挑戦 <strong>9 名</strong></span><span>平均到達 <strong>Gate A</strong></span><span>中央値 <strong>7 分</strong></span></div>
+          <div class="pj__foot"><span class="pj__origin">出自: 実務セッションから変換（匿名化済み）</span><span class="pj__cta">挑戦する</span></div>
+        </div>
+      </div>
+
+      <p class="footnote">
+        ※ 演習モードのスコアだけが組織内の比較・成長率の算出に使われます。実務モードのスコアは本人の振り返り専用です（NFR-F2）。
+      </p>
+    </div>
+  </main>
+</div>
+</body>
+</html>

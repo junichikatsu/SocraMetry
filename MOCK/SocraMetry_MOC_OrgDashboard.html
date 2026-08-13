@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<!--
+  組織ダッシュボード（v0.2 コンセプト / 審査・資料用の静止画モック）
+
+  ★ 実装ではない。データはすべてダミー。
+    ブラウザで開いてスクリーンショットを撮る用途（幅 1440px 想定）。
+
+  設計書との対応（見た目だけでなく思想を反映している）:
+  - 組織の弱点サマリを初期表示にする（roadmap.md M4 / evaluation-model.md §5.2。
+    受け入れ条件「弱い軸を 3 秒以内に把握できる」）
+  - 評価の主役は総合点ではなく成長率（FR-26 / evaluation-model.md §4.2）
+  - 横比較してよいのは演習モードだけ（NFR-F2 / §4.4）
+  - ランキングは既定で無効（Q-11）。この画面にも順位は無い
+  - LLM 実測コストを組織単位で見せる（cost-model.md）
+
+  実装と同じデザイントークン（apps/web/public/styles.css）を使用。
+  外部 CDN・Web フォントは読まない（オフラインのブースでも開ける）。
+-->
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<title>SocraMetry — 組織ダッシュボード（v0.2 コンセプト）</title>
+<style>
+  :root {
+    --brand: #6864d9; --brand-ink: #5b57c9; --brand-soft: #eef1ff;
+    --accent: #ee6793; --accent-strong: #e5537f; --accent-soft: #fdeaf1; --accent-pale: #fff5f7;
+    --mint: #b1dcd8; --mint-soft: #cfe9e5; --mint-pale: #e8f5f3;
+    --ink: #1e293b; --ink-2: #475569; --ink-3: #64748b; --ink-4: #94a3b8;
+    --line: #e2e8f0; --line-soft: #eef2f7; --bg: #f8fafc;
+    --r-md: 12px; --r-lg: 16px; --r-pill: 999px;
+    --shadow-sm: 0 1px 2px rgba(15, 23, 42, .08);
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", system-ui, sans-serif;
+    font-size: 15px; line-height: 1.7; color: var(--ink); background: #fff; overflow: hidden;
+  }
+  .app { display: grid; grid-template-columns: 300px 1fr; grid-template-rows: minmax(0,1fr); height: 100%; }
+
+  /* ── サイドバー（実装と同じ）── */
+  .sidebar { display: flex; flex-direction: column; gap: 8px; padding: 26px 22px; background: var(--mint); }
+  .brand { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+  .brand__mark { width: 46px; height: 46px; }
+  .brand__name { font-size: 21px; font-weight: 800; letter-spacing: -.01em; display: block; line-height: 1.25; }
+  .brand__sub { font-size: 11px; font-weight: 600; letter-spacing: .08em; color: var(--ink-3); }
+  .nav { display: flex; flex-direction: column; gap: 4px; }
+  .nav__item { display: flex; align-items: center; gap: 12px; padding: 11px 16px; border: 0; border-radius: var(--r-md); background: transparent; color: var(--ink-2); font-size: 14px; font-weight: 600; text-align: left; }
+  .nav__item.is-active { background: #fff; color: var(--brand-ink); box-shadow: var(--shadow-sm); }
+  .nav__icon { width: 18px; text-align: center; font-size: 15px; }
+  .nav__badge { margin-left: auto; padding: 1px 7px; border-radius: var(--r-pill); background: rgba(255,255,255,.7); color: var(--ink-3); font-size: 10px; font-weight: 700; }
+  .sidebar__foot { margin-top: auto; display: flex; flex-direction: column; gap: 10px; }
+  .me { display: flex; align-items: center; gap: 12px; }
+  .me__avatar { display: grid; place-items: center; width: 38px; height: 38px; border-radius: var(--r-pill); background: var(--brand); color: #fff; font-size: 11px; font-weight: 700; }
+  .me__name { font-size: 14px; font-weight: 700; display: block; line-height: 1.3; }
+  .me__mail { color: var(--ink-3); font-size: 11px; }
+  .logout { padding: 5px 12px; border: 1px solid var(--line); border-radius: var(--r-pill); background: #fff; color: var(--ink-2); font-size: 12px; font-weight: 700; text-align: center; }
+
+  /* ── 本体 ── */
+  .main { display: flex; flex-direction: column; min-width: 0; }
+  .topbar { display: flex; align-items: center; gap: 12px; height: 66px; padding: 0 26px; border-bottom: 1px solid var(--line-soft); flex-shrink: 0; }
+  .topbar__title { font-size: 19px; font-weight: 800; }
+  .chip { padding: 4px 12px; border-radius: var(--r-pill); background: var(--brand-soft); color: var(--brand-ink); font-size: 11px; font-weight: 700; }
+  .chip--warn { background: var(--accent-soft); color: #d9457a; }
+  .chip--live { background: var(--mint-pale); color: #0f766e; }
+  .spacer { flex: 1; }
+  .math { color: var(--ink-4); font-size: 15px; }
+
+  .view { padding: 26px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
+  h2 { margin: 0; font-size: 22px; font-weight: 800; }
+  .lead { margin: -10px 0 0; color: var(--ink-3); font-size: 13px; }
+
+  /* 弱点サマリ（初期表示 / M4 受け入れ条件「3 秒以内に把握」）*/
+  .headline {
+    display: flex; align-items: center; gap: 16px; padding: 16px 20px;
+    border: 1px solid var(--accent-soft); border-radius: var(--r-lg); background: var(--accent-pale);
+  }
+  .headline__label { flex-shrink: 0; padding: 4px 12px; border-radius: var(--r-pill); background: var(--accent); color: #fff; font-size: 11px; font-weight: 800; }
+  .headline__text { margin: 0; font-size: 15px; font-weight: 700; }
+  .headline__text small { display: block; font-weight: 500; color: var(--ink-3); font-size: 12px; }
+
+  .tiles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; }
+  .tile { display: flex; flex-direction: column; gap: 2px; padding: 16px 18px; border: 1px solid var(--line-soft); border-radius: var(--r-lg); background: #fff; box-shadow: var(--shadow-sm); }
+  .tile__label { color: var(--ink-3); font-size: 12px; font-weight: 600; }
+  .tile__value { font-size: 27px; font-weight: 800; letter-spacing: -.02em; }
+  .tile__value--up { color: #0f766e; }
+  .tile__sub { color: var(--ink-4); font-size: 11px; }
+
+  .cards { display: grid; grid-template-columns: 380px 1fr; gap: 14px; align-items: start; }
+  .card { padding: 18px 20px; border: 1px solid var(--line-soft); border-radius: var(--r-lg); background: #fff; box-shadow: var(--shadow-sm); }
+  .card__title { margin: 0 0 4px; font-size: 15px; font-weight: 800; }
+  .card__note { margin: 0 0 12px; color: var(--ink-3); font-size: 12px; }
+  .radar { display: grid; place-items: center; }
+  .radar svg { width: 100%; max-width: 300px; }
+
+  .bars { display: flex; flex-direction: column; gap: 10px; }
+  .bar { display: grid; grid-template-columns: 150px 1fr 44px; align-items: center; gap: 10px; font-size: 13px; }
+  .bar__track { height: 10px; border-radius: var(--r-pill); background: var(--bg); overflow: hidden; }
+  .bar__fill { height: 100%; border-radius: var(--r-pill); background: var(--accent); }
+  .bar__fill--b { background: var(--brand); }
+  .bar__value { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  .table-wrap { overflow: hidden; border: 1px solid var(--line-soft); border-radius: var(--r-lg); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 9px 14px; border-bottom: 1px solid var(--line-soft); text-align: left; white-space: nowrap; }
+  th { background: var(--bg); color: var(--ink-3); font-size: 11px; font-weight: 700; letter-spacing: .04em; }
+  tr:last-child td { border-bottom: 0; }
+  .growth { font-weight: 800; color: #0f766e; }
+  .growth--flat { color: var(--ink-4); }
+  .axis-chip { padding: 2px 10px; border-radius: var(--r-pill); background: var(--brand-soft); color: var(--brand-ink); font-size: 11px; font-weight: 700; }
+  .footnote { margin: 0; color: var(--ink-4); font-size: 11.5px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <svg class="brand__mark" viewBox="0 0 100 100" aria-hidden="true"><rect width="100" height="100" rx="22" fill="#6864d9"/><path d="M32 100C32 88 30 78 31 66C32 50 36 35 47 27C57 20 71 21 78 29C83 35 85 41 85 46C85 49 84 51 82 52C85 55 88 58 88 61C88 63 86 64 84 64C86 66 86 68 85 69C84 70 83 71 82 71C87 75 89 80 88 85C87 91 82 96 76 100Z" fill="#fff"/></svg>
+      <span><span class="brand__name">SocraMetry</span><span class="brand__sub">AI DEBUG TRAINING</span></span>
+    </div>
+    <nav class="nav">
+      <button class="nav__item"><span class="nav__icon">＋</span>新規セッション</button>
+      <button class="nav__item"><span class="nav__icon">▤</span>セッション一覧</button>
+      <button class="nav__item"><span class="nav__icon">⌕</span>検索</button>
+      <button class="nav__item"><span class="nav__icon">▦</span>トレーニングメニュー</button>
+      <button class="nav__item"><span class="nav__icon">▥</span>ダッシュボード</button>
+      <button class="nav__item is-active"><span class="nav__icon">▩</span>組織ダッシュボード<span class="nav__badge">admin</span></button>
+      <button class="nav__item"><span class="nav__icon">⚙</span>設定</button>
+    </nav>
+    <div class="sidebar__foot">
+      <div class="me">
+        <span class="me__avatar">ADM</span>
+        <span><span class="me__name">Y. Takahashi</span><span class="me__mail">admin@example.com</span></span>
+      </div>
+      <div class="logout">ログアウト</div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <span class="topbar__title">SocraMetry</span>
+      <span class="chip">組織ダッシュボード・解析</span>
+      <span class="chip chip--warn">v0.2 コンセプト — データはダミー</span>
+      <span class="spacer"></span>
+      <span class="math">∫ ∂x = λ</span>
+      <span class="chip chip--live">AI: オンライン</span>
+    </header>
+
+    <div class="view">
+      <h2>組織の学習進捗 &amp; スキルアナリティクス</h2>
+      <p class="lead">開発部 24 名 ・ 2026 年 8 月 ・ 集計対象は完了セッション 152 件</p>
+
+      <!-- 弱点サマリを初期表示にする（M4 受け入れ条件: 弱い軸を 3 秒以内に把握）-->
+      <div class="headline">
+        <span class="headline__label">今月の組織の弱点</span>
+        <p class="headline__text">
+          「検証」— 仮説を立てた後、確かめずに修正へ進むメンバーが 24 名中 14 名
+          <small>非同期処理カテゴリで顕著です。演習「非同期処理の切り分け」の割り当てを提案します → トレーニングメニュー</small>
+        </p>
+      </div>
+
+      <div class="tiles">
+        <div class="tile"><span class="tile__label">アクティブメンバー</span><strong class="tile__value">21<small style="font-size:15px;color:var(--ink-4)"> / 24</small></strong><span class="tile__sub">今月 1 回以上セッション</span></div>
+        <div class="tile"><span class="tile__label">組織の自力解決率</span><strong class="tile__value">64.2%</strong><span class="tile__sub">Gate A + B。完了 152 件から算出</span></div>
+        <div class="tile"><span class="tile__label">平均成長率</span><strong class="tile__value tile__value--up">+8.4pt</strong><span class="tile__sub">直近 5 件 vs 過去 5 件の 5 軸平均</span></div>
+        <div class="tile"><span class="tile__label">詰まり解消の中央値</span><strong class="tile__value">14<small style="font-size:15px;color:var(--ink-4)"> 分</small></strong><span class="tile__sub">開始 → 到達までの実作業時間</span></div>
+        <div class="tile"><span class="tile__label">今月の LLM 実測コスト</span><strong class="tile__value">¥1,294</strong><span class="tile__sub">208 セッション ・ 1 件あたり ¥6.2</span></div>
+      </div>
+
+      <div class="cards">
+        <div class="card">
+          <h3 class="card__title">組織の 5 軸平均</h3>
+          <p class="card__note">完了 152 件の平均。最弱は「検証」52</p>
+          <div class="radar">
+            <svg viewBox="0 0 300 300" role="img">
+              <polygon points="150,128 170.9,143.2 162.9,167.8 137.1,167.8 129.1,143.2" fill="none" stroke="#eef2f7"/>
+              <polygon points="150,106 191.8,136.4 175.9,185.6 124.1,185.6 108.2,136.4" fill="none" stroke="#eef2f7"/>
+              <polygon points="150,84 212.8,129.6 188.8,203.4 111.2,203.4 87.2,129.6" fill="none" stroke="#eef2f7"/>
+              <polygon points="150,62 233.7,122.8 201.8,221.2 98.2,221.2 66.3,122.8" fill="none" stroke="#eef2f7"/>
+              <polygon points="150,40 254.6,116 214.7,239 85.3,239 45.4,116" fill="none" stroke="#cbd5e1"/>
+              <line x1="150" y1="150" x2="150" y2="40" stroke="#e2e8f0"/>
+              <line x1="150" y1="150" x2="254.6" y2="116" stroke="#e2e8f0"/>
+              <line x1="150" y1="150" x2="214.7" y2="239" stroke="#e2e8f0"/>
+              <line x1="150" y1="150" x2="85.3" y2="239" stroke="#e2e8f0"/>
+              <line x1="150" y1="150" x2="45.4" y2="116" stroke="#e2e8f0"/>
+              <polygon points="150,64.2 216.9,128.2 195.9,213.2 116.4,196.3 77.8,126.5" fill="rgba(238,103,147,.20)" stroke="#ee6793" stroke-width="2" stroke-linejoin="round"/>
+              <circle cx="150" cy="64.2" r="3.5" fill="#ee6793"/><circle cx="216.9" cy="128.2" r="3.5" fill="#ee6793"/><circle cx="195.9" cy="213.2" r="3.5" fill="#ee6793"/><circle cx="116.4" cy="196.3" r="3.5" fill="#ee6793"/><circle cx="77.8" cy="126.5" r="3.5" fill="#ee6793"/>
+              <text x="150" y="28" text-anchor="middle" fill="#64748b" font-size="12" font-weight="700">観察 78</text>
+              <text x="262" y="112" text-anchor="start" fill="#64748b" font-size="12" font-weight="700">切り分け 64</text>
+              <text x="222" y="256" text-anchor="start" fill="#64748b" font-size="12" font-weight="700">仮説 71</text>
+              <text x="78" y="256" text-anchor="end" fill="#d9457a" font-size="12" font-weight="800">検証 52</text>
+              <text x="38" y="112" text-anchor="end" fill="#64748b" font-size="12" font-weight="700">修正 69</text>
+            </svg>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 class="card__title">詰まりが多いカテゴリ</h3>
+          <p class="card__note">同一段階 3 回不正解の発生箇所。演習の割り当て先を決める材料</p>
+          <div class="bars">
+            <div class="bar"><span>非同期処理</span><span class="bar__track"><span class="bar__fill" style="display:block;width:34%"></span></span><span class="bar__value">34%</span></div>
+            <div class="bar"><span>リソースリーク</span><span class="bar__track"><span class="bar__fill" style="display:block;width:22%"></span></span><span class="bar__value">22%</span></div>
+            <div class="bar"><span>型エラー</span><span class="bar__track"><span class="bar__fill bar__fill--b" style="display:block;width:18%"></span></span><span class="bar__value">18%</span></div>
+            <div class="bar"><span>N+1 クエリ</span><span class="bar__track"><span class="bar__fill bar__fill--b" style="display:block;width:12%"></span></span><span class="bar__value">12%</span></div>
+            <div class="bar"><span>その他</span><span class="bar__track"><span class="bar__fill bar__fill--b" style="display:block;width:14%"></span></span><span class="bar__value">14%</span></div>
+          </div>
+          <p class="card__note" style="margin:14px 0 0">
+            割り当て済みの演習: 「非同期処理の切り分け」12 名（期限 8/22）— 完了 7 / 進行中 3 / 未着手 2
+          </p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card__title">メンバー（成長率順）</h3>
+        <p class="card__note">評価の主役は総合点ではなく成長率（FR-26）。順位は表示しない（ランキングは組織設定で無効）</p>
+        <div class="table-wrap">
+          <table>
+            <tr><th>メンバー</th><th>今月のセッション</th><th>自力解決率</th><th>伸ばすべき軸</th><th>成長率（演習）</th><th>取り組み量</th></tr>
+            <tr><td>S. Watanabe</td><td>14 件</td><td>71.4%</td><td><span class="axis-chip">検証</span></td><td class="growth">+12.6pt</td><td>4.2 時間</td></tr>
+            <tr><td>K. Sato</td><td>9 件</td><td>55.6%</td><td><span class="axis-chip">切り分け</span></td><td class="growth">+9.1pt</td><td>3.1 時間</td></tr>
+            <tr><td>M. Suzuki</td><td>11 件</td><td>81.8%</td><td><span class="axis-chip">修正</span></td><td class="growth">+7.8pt</td><td>2.8 時間</td></tr>
+            <tr><td>R. Tanaka</td><td>6 件</td><td>50.0%</td><td><span class="axis-chip">検証</span></td><td class="growth">+6.2pt</td><td>2.4 時間</td></tr>
+            <tr><td>A. Kobayashi</td><td>8 件</td><td>62.5%</td><td><span class="axis-chip">観察</span></td><td class="growth growth--flat">+0.4pt</td><td>1.9 時間</td></tr>
+          </table>
+        </div>
+        <p class="footnote" style="margin-top:10px">
+          ※ 成長率は演習モード（同一問題・同一条件）のスコアのみから算出します。実務モードのスコアは本人の振り返り専用で、横比較には使いません（NFR-F2）。
+        </p>
+      </div>
+    </div>
+  </main>
+</div>
+</body>
+</html>
