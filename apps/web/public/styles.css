@@ -77,19 +77,11 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 
 .brand { display: flex; align-items: center; gap: 14px; }
 
-.brand__mark {
-  display: grid;
-  place-items: center;
-  width: 46px; height: 46px;
-  border-radius: var(--r-md);
-  background: var(--brand);
-  color: #fff;
-  font-size: 26px;
-  font-weight: 700;
-}
-
-/* ソクラテスの横顔（<use href="#logo-head">）。塗りは文字色を継ぐ */
-.brand__logo { width: 74%; height: 74%; fill: currentColor; }
+/*
+ * ロゴ画像（assets/logo.png）。タイルの塗りも角丸も画像自身が持っているので、
+ * ここでは大きさだけを決める。背景色を敷かない（角は透過）。
+ */
+.brand__mark { width: 46px; height: 46px; object-fit: contain; }
 
 .brand__text { display: flex; flex-direction: column; line-height: 1.25; }
 .brand__name { font-size: 21px; font-weight: 800; letter-spacing: -0.01em; }
@@ -126,31 +118,16 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .login__glyph--int { left: 8%; }
 .login__glyph--lambda { right: 14%; bottom: 6%; font-size: 120px; }
 
+/*
+ * サービスロゴ（画像がタイル・角丸・ワードマークを持つ。ここでは大きさと影だけ）。
+ * 影は box-shadow ではなく drop-shadow。矩形ではなく**画像の透過形状に沿う**
+ */
 .login__mark {
-  display: grid;
-  place-items: center;
-  width: 170px; height: 170px;
-  border-radius: 34px;
-  background: #fff;
-  box-shadow: var(--shadow-md);
-  color: var(--brand);
-  font-size: 84px;
-  font-weight: 800;
+  width: 180px;
+  height: 180px;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 16px rgba(15, 23, 42, 0.18));
 }
-
-/* サービスロゴの完全形（紫のタイル + 白の横顔 + ワードマーク） */
-.login__mark--logo {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 2px;
-  padding: 14px 10px 16px;
-  background: var(--brand);
-  color: #fff;
-}
-.login__mark-head { width: 68%; flex: 1; min-height: 0; fill: currentColor; }
-.login__mark-name { font-size: 26px; font-weight: 800; letter-spacing: -0.01em; line-height: 1; }
 
 .login__lead { margin: 0; font-size: 34px; font-weight: 800; line-height: 1.35; letter-spacing: -0.02em; }
 .login__body { margin: 0; max-width: 48ch; color: var(--ink-2); font-size: 14px; }

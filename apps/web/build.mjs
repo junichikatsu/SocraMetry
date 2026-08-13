@@ -12,6 +12,10 @@
 //  出力: public/app.js（生成物。git 管理しない）
 // ============================================================================
 import { build, context } from 'esbuild'
+import { copyFileSync } from 'node:fs'
+
+// ロゴの原本は assets/ に置く（public/ は配信物。app.js と同じく git 管理しない）
+copyFileSync('assets/logo.png', 'public/logo.png')
 
 const options = {
   entryPoints: ['src/main.js'],

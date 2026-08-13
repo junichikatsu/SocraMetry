@@ -7,6 +7,8 @@ dist/
 build/
 # フロントエンドのバンドル成果物。編集先は apps/web/src/（ADR-013 改訂）
 apps/web/public/app.js
+# assets/logo.png のコピー（ビルドが配置する）
+apps/web/public/logo.png
 socrametry-function.zip
 .next/
 out/

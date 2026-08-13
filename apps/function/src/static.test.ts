@@ -13,6 +13,8 @@ const FAKE: Record<AssetName, string> = {
   'index.html': '<!doctype html><title>SocraMetry</title>',
   'styles.css': 'body { margin: 0 }',
   'app.js': 'console.log("ok")',
+  // バイナリは base64 で持つ（"PNG..." のダミーバイト列）
+  'logo.png': Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).toString('base64'),
 }
 
 afterEach(() => {
@@ -77,12 +79,25 @@ describe('各アセット', () => {
       'index.html': 'text/html',
       'styles.css': 'text/css',
       'app.js': 'text/javascript',
+      'logo.png': 'image/png',
     }
     for (const name of ASSETS) {
       const res = await app.request(`/${name}`)
       expect(res.status, name).toBe(200)
       expect(res.headers.get('content-type'), name).toContain(expected[name])
     }
+  })
+
+  /**
+   * バイナリは base64 で埋め込み、配信の直前にバイトへ戻す。
+   * **base64 文字列のまま返すと画像として壊れる**ので、バイト列で確かめる。
+   */
+  it('logo.png は base64 ではなく元のバイト列で届く', async () => {
+    setStaticAssetLoader((name) => FAKE[name])
+    const res = await app.request('/logo.png')
+
+    const bytes = new Uint8Array(await res.arrayBuffer())
+    expect([...bytes]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
   })
 })
 

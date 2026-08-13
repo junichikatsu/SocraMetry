@@ -20,7 +20,8 @@ logConfigIssues()
 setStaticAssetLoader((name) => {
   const path = fileURLToPath(new URL(`../../web/public/${name}`, import.meta.url))
   try {
-    return readFileSync(path, 'utf8')
+    // バイナリは base64 で返す（static.ts が配信の直前にバイトへ戻す）
+    return readFileSync(path, name.endsWith('.png') ? 'base64' : 'utf8')
   } catch {
     console.warn(`静的ファイルが読めません: ${path}`)
     return null

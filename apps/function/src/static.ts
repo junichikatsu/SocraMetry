@@ -19,8 +19,15 @@ import { Hono } from 'hono'
  * > 既に `__BUILD_INFO__` で使っている define と同じ仕組みに寄せた。
  */
 
-const ASSETS = ['index.html', 'styles.css', 'app.js'] as const
+/**
+ * `logo.png` はバイナリ。埋め込みもローカルの読み込みも **base64 の文字列**で
+ * 統一し（`__STATIC_ASSETS__` は JSON なので文字列しか持てない）、
+ * 配信の直前にだけバイトへ戻す。
+ */
+const ASSETS = ['index.html', 'styles.css', 'app.js', 'logo.png'] as const
 export type AssetName = (typeof ASSETS)[number]
+
+const BINARY_ASSETS: ReadonlySet<AssetName> = new Set<AssetName>(['logo.png'])
 
 /**
  * `index.html` の中でアセットの版を差し込む場所。
@@ -42,6 +49,7 @@ const CONTENT_TYPES: Record<AssetName, string> = {
   'index.html': 'text/html; charset=utf-8',
   'styles.css': 'text/css; charset=utf-8',
   'app.js': 'text/javascript; charset=utf-8',
+  'logo.png': 'image/png',
 }
 
 /** ビルド時に埋め込まれた中身。tsx でのローカル起動時は定義されない */
@@ -123,18 +131,25 @@ function sendAsset(c: Context, name: AssetName): Response {
     )
   }
 
-  return c.body(body, 200, {
+  const headers = {
     'content-type': CONTENT_TYPES[name],
     /*
       キャッシュより「デプロイが即反映される」を取る。デモ中に古い画面が出る方が
       損失が大きい。
 
       ★ ただし**このヘッダが残るのは HTML だけ**。実行環境の前段が
-        `.css` / `.js` に `max-age=14400` を上書きする（deployment.md §4.4）。
+        `.css` / `.js` / `.png` に `max-age=14400` を上書きする（deployment.md §4.4）。
         そちらは `index.html` の `?v=` で URL を変えて跨いでいる。
     */
     'cache-control': 'no-cache',
-  })
+  }
+
+  if (BINARY_ASSETS.has(name)) {
+    // base64 で持っている中身をバイトへ戻す。hono/aws-lambda は
+    // content-type がバイナリのとき isBase64Encoded で応答する
+    return c.body(Uint8Array.from(atob(body), (ch) => ch.charCodeAt(0)).buffer, 200, headers)
+  }
+  return c.body(body, 200, headers)
 }
 
 export { ASSETS }

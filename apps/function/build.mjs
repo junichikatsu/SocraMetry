@@ -99,12 +99,14 @@ console.log(`${ZIP_PATH}  ${(size / 1024).toFixed(1)} KB  (commit: ${commit})`)
  * デプロイされる方が、原因を追う時間の損失が大きい。
  */
 async function readStaticAssets() {
-  const names = ['index.html', 'styles.css', 'app.js']
+  const names = ['index.html', 'styles.css', 'app.js', 'logo.png']
   const entries = await Promise.all(
     names.map(async (name) => {
       const path = `../web/public/${name}`
       try {
-        return [name, await readFile(path, 'utf8')]
+        // バイナリは base64 の文字列として埋め込む（define は JSON しか持てない）
+        const encoding = name.endsWith('.png') ? 'base64' : 'utf8'
+        return [name, await readFile(path, { encoding })]
       } catch {
         throw new Error(`静的ファイルが見つかりません: ${path}`)
       }
