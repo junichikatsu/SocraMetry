@@ -16,6 +16,12 @@ const CENTER = SIZE / 2
 const RADIUS = 104
 /** 目盛りの本数（20 / 40 / 60 / 80 / 100） */
 const RINGS = 5
+/**
+ * 左右の余白。軸名は五角形の**外側**に置くため、viewBox を図形ぴったりに
+ * すると左右の軸名がはみ出して切れる（最長は「切り分け」で、右の頂点
+ * x≈268 から始まり 300 を超える）。左右対称に足し、中心は動かさない。
+ */
+const PAD = 24
 
 function node(tag, attrs) {
   const n = document.createElementNS(NS, tag)
@@ -52,7 +58,7 @@ export function renderRadar(host, axes, options = {}) {
   clear(host)
 
   const count = axes.length
-  const svg = node('svg', { viewBox: `0 0 ${SIZE} ${SIZE}`, role: 'img' })
+  const svg = node('svg', { viewBox: `${-PAD} 0 ${SIZE + PAD * 2} ${SIZE}`, role: 'img' })
   const title = node('title', {})
   title.textContent = options.referenceOnly ? '5 軸スコア（参考値）' : '5 軸スコア'
   svg.appendChild(title)
