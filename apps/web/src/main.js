@@ -160,6 +160,8 @@ function setComposerMode(mode) {
   byId('composer-hint').textContent = COMPOSER[mode].hint
   const send = /** @type {HTMLButtonElement} */ (byId('btn-send'))
   send.disabled = !COMPOSER[mode].active
+  // 完了・中断したセッションでは、開いたままの設問・振り返りも閉じる
+  if (mode === 'locked') thread.retireSticky()
   maskPreview.reset()
   updateComposer()
   renderGateActions()
@@ -572,15 +574,25 @@ async function advance(confirmFirst) {
 }
 
 function showQuestion(question) {
+  // 前の設問がまだ開いていれば閉じる（同時に答えられる問いは常に 1 つ）
+  thread.retireSticky()
   state.question = question
   state.questionShownAt = Date.now()
   thread.bot({
     texts: [`${stageName(question.stage)} — ${question.seqInStage} 問目`],
     callout: { label: '選択問題（Gate B）', body: question.body },
     nodes: [
-      thread.optionList(question.options, (id) => {
-        withThinking(null, () => answer(id))
-      }),
+      /**
+       * sticky: ヒントの追加や原因宣言のやりとりでメッセージが積まれても、
+       * この設問は**まだ答えられる**。閉じるのは retireSticky() の仕事
+       */
+      thread.optionList(
+        question.options,
+        (id) => {
+          withThinking(null, () => answer(id))
+        },
+        { sticky: true },
+      ),
     ],
   })
 }
@@ -606,7 +618,10 @@ async function answer(optionId) {
     return
   }
 
-  // 全段階を通過。**ここで完了にはならない。** 原因宣言と Gate C が残っている
+  // 全段階を通過。答え終えた設問を閉じる。
+  // **ここで完了にはならない。** 原因宣言と Gate C が残っている
+  thread.retireSticky()
+  state.question = null
   thread.bot({
     texts: ['設問はここまでです。原因が分かったなら、下の「原因が分かった」から宣言してください。'],
   })
@@ -687,6 +702,10 @@ async function reveal() {
    * （socratic-engine.md の P2 / FR-08）、**その解説を読み飛ばさせたら本末転倒**になる。
    * 読み終えたことを利用者に宣言させてから次へ進む。
    */
+  // 開示したら設問には戻れない（Gate C）。開いている設問を閉じる
+  thread.retireSticky()
+  state.question = null
+
   thread.bot({
     lead: 'ここまでの経過をふまえて、原因をお伝えします。',
     nodes: [
@@ -707,9 +726,14 @@ function showRetrospection(retrospection) {
     texts: ['最後に 1 問だけ。今回の経験を次に活かすための確認です。'],
     callout: { label: '振り返り', body: retrospection.question, calm: true },
     nodes: [
-      thread.optionList(retrospection.options, (id) => {
-        withThinking(null, () => retrospect(id))
-      }),
+      // sticky: 途中で他のメッセージが積まれても、振り返りは答えられる
+      thread.optionList(
+        retrospection.options,
+        (id) => {
+          withThinking(null, () => retrospect(id))
+        },
+        { sticky: true },
+      ),
     ],
   })
 }

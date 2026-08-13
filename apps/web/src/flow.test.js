@@ -45,6 +45,17 @@ const ACTIONS = {
   canDeclareConclusion: true,
   canReveal: false,
 }
+const QUESTION = {
+  id: 'S1#1',
+  stage: 'observe',
+  seqInStage: 1,
+  body: 'このエラーメッセージは、何が undefined だったと言っていますか？',
+  options: [
+    { id: 'a', label: 'map という名前の変数' },
+    { id: 'b', label: '呼び出し対象のオブジェクト' },
+  ],
+}
+
 const STATS = {
   sessionCount: 0,
   totalElapsedMs: 0,
@@ -95,6 +106,12 @@ async function bootApp() {
     calls.push({ method, path, body: opts.body ? JSON.parse(opts.body) : undefined })
 
     const key = `${method} ${path}`
+    if (key === 'POST /v1/sessions/S1/advance')
+      return json({ session: { ...SESSION, gate: 'B', currentStage: 'observe', stageIndex: 1 }, question: QUESTION, actions: { ...ACTIONS, canAdvanceToQuestions: false } })
+    if (key === 'POST /v1/sessions/S1/hints')
+      return json({ session: { ...SESSION, gate: 'B', hintLevel: 2 }, hint: { level: 2, body: 'ヒント2です' }, actions: { ...ACTIONS, canAdvanceToQuestions: false } })
+    if (key === 'POST /v1/sessions/S1/answers')
+      return json({ session: { ...SESSION, gate: 'B' }, result: { isCorrect: true, feedback: 'その通りです' }, nextQuestion: null, actions: { ...ACTIONS, canAdvanceToQuestions: false } })
     if (key === 'GET /v1/me') return json({ me: ME })
     if (key === 'GET /v1/health')
       return json({ status: 'ok', version: '0', commit: 'c0ffee0', mockMode: true, configOk: true })
@@ -268,6 +285,39 @@ describe('新規セッション開始の流れ（PR #33）', () => {
     const posts = app.sessionPosts()
     expect(posts).toHaveLength(2)
     expect(posts[1].body).toMatchObject({ language: 'typescript', framework: 'react' })
+  })
+
+  /**
+   * Gate B でヒントを挟んでも、設問に答えられる（報告のあった不具合の再発防止）。
+   *
+   * スレッドは新しいメッセージを積むとき古い操作ボタンを無効化するが、
+   * **未回答の設問はまだ答えられる現役の問い**であって、古くなったわけではない。
+   * ヒントのメッセージが積まれた時点で選択肢が死ぬと、設問に戻る手段が無くなる。
+   */
+  it('Gate B: ヒントを表示したあとも設問に答えられる', async () => {
+    const app = await bootApp()
+    await app.sendError('TypeError: boom')
+    app.clickButton('しない')
+    await flush()
+
+    // 設問へ進む（confirm はテストで常に true）
+    app.clickButton('設問に進む')
+    await flush()
+    expect(app.threadText()).toContain('このエラーメッセージは、何が undefined だったと言っていますか？')
+
+    // ヒントを開く
+    app.clickButton('ヒントに進む')
+    await flush()
+    expect(app.threadText()).toContain('ヒント2です')
+
+    // ★ 設問の選択肢がまだ押せて、回答が送れる
+    app.clickButton('B. 呼び出し対象のオブジェクト')
+    await flush()
+
+    const answers = app.calls.filter((c) => c.method === 'POST' && c.path === '/v1/sessions/S1/answers')
+    expect(answers).toHaveLength(1)
+    expect(answers[0].body).toMatchObject({ questionId: 'S1#1', selectedOptionId: 'b' })
+    expect(app.threadText()).toContain('その通りです')
   })
 
   it('未入力のままでも「エラーを見てもらう」で進める（すべて任意）', async () => {

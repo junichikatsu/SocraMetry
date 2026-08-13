@@ -81,19 +81,40 @@ function shell(meta) {
 /**
  * スレッドに積む。
  *
- * **積む前に、それまでのメッセージの操作ボタンをすべて無効化する。**
- * 進行はサーバの `actions` に従って毎回作り直しているので、古いメッセージに
- * 残ったボタンは既に条件を満たさない。押せてしまうと 409 を返させるだけで、
+ * **積む前に、それまでのメッセージの操作ボタンを無効化する。**
+ * 一度きりの導線（追加する / しない、レポートを表示など）は、次のメッセージが
+ * 積まれた時点で用済みになる。押せてしまうと 409 を返させるだけで、
  * 「押せるのに効かない」という最も分かりにくい状態になる。
+ *
+ * ★ ただし **`.options--sticky`（現在の設問・振り返り）は殺さない。**
+ * ヒントの追加や原因宣言のやりとりでメッセージが積まれても、未回答の設問は
+ * **まだ答えられる現役の問い**であって、古くなったわけではない。
+ * ここで無効化すると「ヒントを見たら設問に戻れない」が起きる（実際に起きた）。
+ * 閉じるのは、答えられなくなった時点で呼ばれる `retireSticky()` の仕事。
  */
 function push(root) {
   const node = thread()
-  for (const stale of node.querySelectorAll('.actions button, .options button')) {
+  for (const stale of node.querySelectorAll(
+    '.actions button, .options:not(.options--sticky) button',
+  )) {
     /** @type {HTMLButtonElement} */ (stale).disabled = true
   }
   node.appendChild(root)
   scrollToNew(root)
   return root
+}
+
+/**
+ * 現在の設問・振り返りを閉じる。**もう答えられなくなったとき**に呼ぶ
+ * （次の設問に進んだ / 開示した / セッションが完了した）。
+ */
+export function retireSticky() {
+  for (const b of thread().querySelectorAll('.options--sticky button')) {
+    /** @type {HTMLButtonElement} */ (b).disabled = true
+  }
+  for (const list of thread().querySelectorAll('.options--sticky')) {
+    list.classList.remove('options--sticky')
+  }
 }
 
 /**
@@ -158,11 +179,15 @@ export function thinking() {
  * 連打による二重回答はサーバの冪等性で防いでいるが（api-spec.md §4）、
  * 押せてしまう見た目のままだと「効いていない」と読める。
  *
+ * 現役の問い（設問・振り返り）は `sticky` にする。後からメッセージが積まれても
+ * 無効化されず、`retireSticky()` が呼ばれるまで答えられる（`push` の注記）。
+ *
  * @param {{id: string, label: string}[]} options
  * @param {(id: string) => void} onPick
+ * @param {{ sticky?: boolean }} [opts]
  */
-export function optionList(options, onPick) {
-  const list = el('div', 'options')
+export function optionList(options, onPick, opts = {}) {
+  const list = el('div', opts.sticky ? 'options options--sticky' : 'options')
   const buttons = options.map((option) =>
     button(`${option.id.toUpperCase()}. ${option.label}`, 'option', () => {
       for (const b of buttons) b.disabled = true
