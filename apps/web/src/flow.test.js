@@ -320,6 +320,40 @@ describe('新規セッション開始の流れ（PR #33）', () => {
     expect(app.threadText()).toContain('その通りです')
   })
 
+  /**
+   * 宣言モード中、「原因が分かった」は**戻る導線**に変わる。
+   * 表記がそのままだと、やめたい人がもう一度それを押すとは思えない
+   * （押したら送信されそうに見える）。
+   */
+  it('Gate B: 「原因が分かった」を押すと「設問に戻る」に変わり、押すと設問へ戻れる', async () => {
+    const app = await bootApp()
+    await app.sendError('TypeError: boom')
+    app.clickButton('しない')
+    await flush()
+    app.clickButton('設問に進む')
+    await flush()
+
+    const input = /** @type {HTMLTextAreaElement} */ (app.d.getElementById('composer-input'))
+    const declare = /** @type {HTMLButtonElement} */ (app.d.getElementById('btn-declare'))
+
+    // 宣言モードへ: 入力欄が開き、表記が変わる
+    app.clickButton('原因が分かった')
+    await flush()
+    expect(input.disabled).toBe(false)
+    expect(declare.textContent).toBe('設問に戻る')
+
+    // 戻る: 入力欄が閉じ、表記が戻り、設問にはまだ答えられる
+    app.clickButton('設問に戻る')
+    await flush()
+    expect(input.disabled).toBe(true)
+    expect(declare.textContent).toBe('原因が分かった')
+    app.clickButton('B. 呼び出し対象のオブジェクト')
+    await flush()
+    expect(
+      app.calls.filter((c) => c.method === 'POST' && c.path === '/v1/sessions/S1/answers'),
+    ).toHaveLength(1)
+  })
+
   it('未入力のままでも「エラーを見てもらう」で進める（すべて任意）', async () => {
     const app = await bootApp()
     await app.sendError('TypeError: boom')

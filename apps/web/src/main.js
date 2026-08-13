@@ -276,7 +276,20 @@ function renderGateActions() {
   enable('btn-hint', !declaring)
   enable('btn-advance', !declaring)
   enable('btn-reveal', !declaring)
-  byId('btn-declare').setAttribute('aria-pressed', String(declaring))
+
+  /**
+   * 宣言モード中は、同じボタンが**戻る導線**になる。
+   * 「原因が分かった」のままだと、やめたい人がもう一度それを押すとは思えない
+   * （押したら送信されそうに見える）。何に戻るかはゲートで違う:
+   * Gate B は設問へ、Gate A には設問が無いのでヒントを読む状態へ。
+   */
+  const declareBtn = byId('btn-declare')
+  declareBtn.setAttribute('aria-pressed', String(declaring))
+  declareBtn.textContent = !declaring
+    ? '原因が分かった'
+    : state.session?.gate === 'B'
+      ? '設問に戻る'
+      : '宣言をやめる'
 
   /**
    * Gate B で解説がまだ読めないとき、**どうすれば読めるようになるか**を出す。
