@@ -8,6 +8,7 @@ import {
   createSession,
   deleteSessionCascade,
   getSessionState,
+  getTranscript,
 } from '../services/session-service'
 
 /**
@@ -34,6 +35,14 @@ sessionRoutes.post('/v1/sessions', async (c) => {
 /** 復帰用。リロードしても続きから戻れる */
 sessionRoutes.get('/v1/sessions/:id', async (c) =>
   c.json(await getSessionState(c.get('auth'), sessionIdOf(c))),
+)
+
+/**
+ * 中断したセッションを画面に組み直すための記録（#27）。
+ * `sessions` に入っているものを時系列に並べ直したもの。
+ */
+sessionRoutes.get('/v1/sessions/:id/transcript', async (c) =>
+  c.json(await getTranscript(c.get('auth'), sessionIdOf(c))),
 )
 
 /** 利用者が自分のデータを削除できる（NFR-S7） */

@@ -10,6 +10,8 @@ export default tseslint.config(
       '**/build/**',
       '**/.turbo/**',
       '**/coverage/**',
+      // esbuild の生成物。lint は入力側（apps/web/src）に当てる
+      'apps/web/public/app.js',
     ],
   },
   js.configs.recommended,
@@ -37,16 +39,20 @@ export default tseslint.config(
     },
   },
   {
-    // フロントエンド（ADR-013: フレームワークなし・ビルド工程なし）。
-    // ブラウザで直接実行されるため、Node ではなくブラウザのグローバルを持つ。
-    files: ['apps/web/public/**/*.js'],
+    // フロントエンド（ADR-013 改訂: フレームワークなし・バンドルのみ）。
+    // ブラウザで実行されるため、Node ではなくブラウザのグローバルを持つ。
+    files: ['apps/web/src/**/*.js'],
     languageOptions: {
+      sourceType: 'module',
       globals: {
+        clearTimeout: 'readonly',
         console: 'readonly',
         document: 'readonly',
+        Event: 'readonly',
         fetch: 'readonly',
-        location: 'readonly',
         FormData: 'readonly',
+        localStorage: 'readonly',
+        location: 'readonly',
         setTimeout: 'readonly',
         URL: 'readonly',
         window: 'readonly',

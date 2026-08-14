@@ -13,6 +13,9 @@ const FAKE: Record<AssetName, string> = {
   'index.html': '<!doctype html><title>SocraMetry</title>',
   'styles.css': 'body { margin: 0 }',
   'app.js': 'console.log("ok")',
+  // バイナリは base64 で持つ（"PNG..." のダミーバイト列）
+  'logo.png': Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).toString('base64'),
+  'robo.png': Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).toString('base64'),
 }
 
 afterEach(() => {
@@ -42,6 +45,39 @@ describe('GET /', () => {
     expect(res.status).toBe(500)
     await expect(res.json()).resolves.toMatchObject({ error: { code: 'ASSET_NOT_BUILT' } })
   })
+
+  /**
+   * `cache-control: no-cache` が効くのは HTML だけだった。実行環境の前段が
+   * `.css` / `.js` に `max-age=14400` を上書きするため、**ヘッダでは止められない。**
+   * URL を変えるしかないので、HTML 側に版を差し込んでいる。
+   */
+  it('CSS と JS の URL に版が入る（前段のキャッシュを跨ぐ唯一の手段）', async () => {
+    setStaticAssetLoader(() => '<link href="styles.css?v=__ASSET_VERSION__"><script src="app.js?v=__ASSET_VERSION__">')
+    const html = await (await app.request('/')).text()
+
+    // 置換され、目印が残っていないこと
+    expect(html).not.toContain('__ASSET_VERSION__')
+    const versions = [...html.matchAll(/\?v=([^"']+)/g)].map((m) => m[1])
+    expect(versions).toHaveLength(2)
+    expect(versions[0]).toBeTruthy()
+    // CSS と JS で同じ版になる（片方だけ古い、が起きない）
+    expect(versions[0]).toBe(versions[1])
+  })
+
+  it('app.js にも版を差し込む（JS が組み立てる <img> が使う）', async () => {
+    setStaticAssetLoader(() => "icon.src = 'robo.png?v=__ASSET_VERSION__'")
+    const js = await (await app.request('/app.js')).text()
+
+    expect(js).not.toContain('__ASSET_VERSION__')
+    expect(js).toMatch(/robo\.png\?v=.+'/)
+  })
+
+  it('版を差し込むのは HTML と JS だけ（CSS の中身は書き換えない）', async () => {
+    setStaticAssetLoader(() => 'content: "__ASSET_VERSION__"')
+    const css = await (await app.request('/styles.css')).text()
+
+    expect(css).toContain('__ASSET_VERSION__')
+  })
 })
 
 describe('各アセット', () => {
@@ -52,12 +88,26 @@ describe('各アセット', () => {
       'index.html': 'text/html',
       'styles.css': 'text/css',
       'app.js': 'text/javascript',
+      'logo.png': 'image/png',
+      'robo.png': 'image/png',
     }
     for (const name of ASSETS) {
       const res = await app.request(`/${name}`)
       expect(res.status, name).toBe(200)
       expect(res.headers.get('content-type'), name).toContain(expected[name])
     }
+  })
+
+  /**
+   * バイナリは base64 で埋め込み、配信の直前にバイトへ戻す。
+   * **base64 文字列のまま返すと画像として壊れる**ので、バイト列で確かめる。
+   */
+  it('logo.png は base64 ではなく元のバイト列で届く', async () => {
+    setStaticAssetLoader((name) => FAKE[name])
+    const res = await app.request('/logo.png')
+
+    const bytes = new Uint8Array(await res.arrayBuffer())
+    expect([...bytes]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
   })
 })
 

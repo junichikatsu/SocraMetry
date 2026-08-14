@@ -5,7 +5,8 @@
   "type": "module",
   "description": "ドメインロジック（純関数・LLM / データストアに依存しない）",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./masking": "./src/masking.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

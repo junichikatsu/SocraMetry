@@ -1,10 +1,19 @@
 # ============================================================================
 #  SocraMetry — enebular クラウド実行環境への ZIP デプロイ
 #
-#  現状: v0.1 のバックエンド API は実装済みです（フロントエンドは未実装）。
+#  現状: v0.1 のバックエンド API とフロントエンドは実装済みです。
 #        トリガーは workflow_dispatch のみに絞っています。
-#        自動デプロイにするなら、フロントを載せて 1 画面が通ったあとに
+#        自動デプロイにするなら、staging で通しの確認が済んだあとに
 #        下の push トリガーを有効化してください（意図しないデプロイを避けるため）。
+#
+#  デプロイ先は GitHub Environment で切り替えます。認証情報（Secrets）と
+#  enebular の ID 群（Variables）は Environment ごとに持ちます。
+#
+#  | Environment | 用途 | 状態 |
+#  |---|---|---|
+#  | staging     | 通しの動作確認・デモ | 設定済み |
+#  | development | 開発中の動作確認     | 設定済み |
+#  | production  | 本番                 | **未作成**（選ぶと設定不足で止まります） |
 #
 #  仕様: docs/deployment.md
 # ============================================================================
@@ -16,8 +25,10 @@ on:
       environment:
         description: "デプロイ先の GitHub Environment"
         required: true
+        default: "staging"
         type: choice
         options:
+          - staging
           - development
           - production
       version_name:
@@ -33,18 +44,18 @@ on:
 
   # 実装完了後に有効化する:
   # push:
-  #   branches: [main]          # → development
+  #   branches: [develop]       # → staging
   #   tags: ["v*"]              # → production
 
 concurrency:
   # 同一環境への同時デプロイを防ぐ（enebular 側の状態が競合するため）
-  group: deploy-function-${{ github.event.inputs.environment || 'development' }}
+  group: deploy-function-${{ github.event.inputs.environment || 'staging' }}
   cancel-in-progress: false
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.environment || 'development' }}
+    environment: ${{ github.event.inputs.environment || 'staging' }}
     permissions:
       contents: read
 

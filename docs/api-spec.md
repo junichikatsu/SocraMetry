@@ -137,6 +137,7 @@ Set-Cookie: sm_session=<jwt>; HttpOnly; Secure; SameSite=None; Max-Age=86400; Pa
 | POST | `/v1/sessions` | セッション開始。**Gate A のヒントを返す。診断は待たない** | member | 〜5 秒 |
 | POST | `/v1/sessions/:id/diagnose` | 先行診断の実行（クライアントが即座に発火） | member | 〜20 秒 |
 | GET | `/v1/sessions/:id` | セッション状態の取得（復帰用） | member | 〜1 秒 |
+| GET | `/v1/sessions/:id/transcript` | **中断からの復旧用の記録**（#27 / 下記） | member | 〜1 秒 |
 | POST | `/v1/sessions/:id/hints` | **Gate A**: ヒントレベルを 1 段階上げる | member | 〜3 秒 |
 | POST | `/v1/sessions/:id/advance` | **Gate A → B**: 設問に進む | member | 〜5 秒 |
 | POST | `/v1/sessions/:id/answers` | **Gate B**: 選択肢に回答し、次の設問を得る | member | 〜4 秒 |
@@ -300,7 +301,8 @@ Set-Cookie: sm_session=<jwt>; HttpOnly; Secure; SameSite=None; Max-Age=86400; Pa
     "gate": "A",
     "hintLevel": 1,
     "diagnosisStatus": "pending",     // ← クライアントはこれを見て diagnose を撃つ
-    "startedAt": 1786000000000
+    "startedAt": 1786000000000,
+    "autoAdvanceInMs": null           // ← 時間経過による Gate A → B までの残り時間
   },
   "hint": {
     "level": 1,
@@ -317,6 +319,40 @@ Set-Cookie: sm_session=<jwt>; HttpOnly; Secure; SameSite=None; Max-Age=86400; Pa
 
 > **設問は返さない。** Gate A は着眼点のヒントのみ。
 > ここで解決できたセッションが最上位評価（`gate_factor` 1.00）になる。
+
+**中断していた時間は時間条件から差し引く**（#27）
+
+`sessions` は `lastSeenAt`（最後の操作）と `awayMs`（中断の合計）を持つ。
+セッションを読むすべての経路で空白を判定し、次のように扱う。
+
+| 空白 | 扱い |
+|---|---|
+| 1 分未満 | ふつうの操作間隔。何もしない |
+| 1 分以上 | `awayMs` に足す。`autoAdvanceInMs` と Gate C の解放から引かれる |
+| `SESSION_ABANDON_AFTER_MS`（既定 24 時間）以上 | `status: "abandoned"`。以降の操作は `409` |
+
+> 2 つのタイマーは「詰まった人を助けるための安全弁」であって評価のための計測ではない
+> （socratic-engine.md §7 / P2）。中断を数えると
+> **「昨日のセッションを開いた瞬間に設問へ飛ぶ」「一晩置けば解説に直行できる」**が起きる。
+>
+> `startedAt` は書き換えない。履歴の表示に使う値なので、事実として動かさない。
+
+**`autoAdvanceInMs` について**（FR-07 の時間経過による Gate A → B）
+
+`session` を返すすべての応答に載る。**時間経過で設問へ移るまでの残りミリ秒**で、
+条件を満たしていなければ `null`。
+
+| なぜこの形か | |
+|---|---|
+| **クライアントにタイマーを置くため** | 実行環境が Lambda であり、定期実行を持てない。タイマーの置き場所がクライアントしかない |
+| **条件ではなく「いつ」だけを渡す** | 発火条件（ヒント Lv3 開放 かつ 一定時間経過）はサーバの `core` にある。条件式を渡すと遷移規則が 2 箇所に分かれて必ずずれる |
+| **絶対時刻ではなく残り時間** | クライアントの時計はサーバとずれる。残り時間なら時計のずれが乗らない |
+
+クライアント側の責務は 2 つだけ。
+
+1. `autoAdvanceInMs` 経過後に `POST /advance` を撃つ
+2. **利用者が入力中は適用しない**（socratic-engine.md §7 の判断 3）。
+   これもサーバからは観測できないため、クライアントにしか置けない
 
 **処理フロー**
 
@@ -394,9 +430,22 @@ Set-Cookie: sm_session=<jwt>; HttpOnly; Secure; SameSite=None; Max-Age=86400; Pa
       { "id": "c", "label": "map に渡したコールバック関数" },
       { "id": "d", "label": "map の戻り値" }
     ]
+  },
+  "actions": {
+    "canRequestHint": true,
+    "canAdvanceToQuestions": false,   // ← Gate B に入ったので false
+    "canDeclareConclusion": true,
+    "canReveal": false
   }
 }
 ```
+
+> **`session` を返す応答には必ず `actions` を付ける。**
+> 画面は「どのボタンを出してよいか」を `actions` だけで決めている（§7 の設計判断）。
+> 付け忘れると、クライアントは**1 つ前の状態を出し続ける。**
+> 実際にこのエンドポイントが `actions` を返しておらず、Gate B に入った後も
+> Gate A のボタン（「設問に進む」）が画面に出たままになっていた。
+> 検査は `api.test.ts` の「session を返す応答には必ず actions が付く」。
 
 **注意**: この遷移は**不可逆**。以降 Gate A の評価（`gate_factor` 1.00）は得られない。
 クライアントは実行前に確認ダイアログを出す。
@@ -552,6 +601,39 @@ socratic-engine.md §4.3 の「詰まった人を助ける」目的と逆にな�
 回答するとセッションが `completed` になる。
 
 ---
+
+### 3.7a `GET /v1/sessions/:id/transcript` — 中断からの復旧（#27）
+
+`sessions` に入っている記録を**時系列に並べ直して返す。** 画面はこれを順に流して
+スレッドを組み直す。
+
+```jsonc
+{
+  "session": { /* SessionPublic */ },
+  "entries": [
+    { "kind": "error",   "at": 1786000000000, "body": "TypeError: …", "language": "typescript" },
+    { "kind": "hint",    "at": 1786000000100, "level": 1, "body": "…", "auto": true },
+    { "kind": "question","at": 1786000060000, "stage": "observe", "seqInStage": 1,
+      "body": "…", "options": [/* … */],
+      // 未回答なら null。再開後に続きから答える対象
+      "answer": { "selectedOptionId": "b", "isCorrect": true, "feedback": "…" } },
+    { "kind": "conclusion", "at": 1786000200000, "body": "…", "verdict": null, "feedback": "…" }
+    // Gate C 到達済みなら reveal / retrospection が続く
+  ],
+  "question": null,              // 未回答の設問
+  "actions": { /* … */ }
+}
+```
+
+> **答えが漏れる新しい経路は作っていない。**
+> 元になる `sessions` には正解 ID も内部診断も入っていない（ADR-005 で
+> `session_secrets` に隔離済み）。並べ直しただけの応答は**構造として答えを含みようがない。**
+>
+> 唯一の例外が `reveal` で、これは答えそのもの。**`gate` が `C` の場合にだけ**載せる。
+> 検査は `api.test.ts` の「Gate C の前は解説を含まない（DoD #2）」。
+
+`conclusions` は冪等判定用のハッシュに加えて**本文（マスキング済み）も保存する。**
+ハッシュだけだと、再開したときに自分が何を書いたか復元できないため。
 
 ### 3.8 `GET /v1/sessions/:id/report` — 振り返りレポート
 
@@ -864,6 +946,21 @@ socratic-engine.md §4.3 の「詰まった人を助ける」目的と逆にな�
 | その他 | 600 回 / 時 / メンバー |
 
 超過時は `429` と `Retry-After` ヘッダを返す。
+
+> **v0.1 で実装しているのは `POST /v1/sessions` だけ**（`RATE_LIMIT_SESSIONS_PER_HOUR`、既定 10）。
+>
+> 判定はカウンタを持たずに行う。**`sessionId` が ULID で作成時刻を含んでいる**ため、
+> 新しい順に N 件引いて N 件目が 1 時間以内かを見れば足りる（下の「実装上の注意」の方針どおり）。
+> **固定の 1 時間区切りではなくスライド窓**で、N 件目が 1 時間を過ぎた時点で 1 枠空く。
+>
+> **`MOCK_MODE` では無効にならない。** モックが差し替えるのは LLM だけで（ADR-014）、
+> レート制限はデータストア上の実データで判定する。**画面を繰り返し試すと引っかかる**ため、
+> デモや動作確認では `RATE_LIMIT_SESSIONS_PER_HOUR` を上げておく。
+>
+> `Retry-After` は**画面に出す**（「あと約 24 分で再開できます」）。
+> 同一オリジン配信（ADR-012）なのでブラウザからそのまま読める。
+> 別ホストに置いていたら CORS の既定でヘッダが見えず、
+> `Access-Control-Expose-Headers` の設定が要るところだった。
 
 > **実装上の注意**: Lambda は状態を持てないため、カウンタはデータストアに置くことになるが、
 > それ自体がアクセス枠（E4）を消費して本末転倒になる。

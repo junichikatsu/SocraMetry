@@ -19,13 +19,38 @@ import { Hono } from 'hono'
  * > 既に `__BUILD_INFO__` で使っている define と同じ仕組みに寄せた。
  */
 
-const ASSETS = ['index.html', 'styles.css', 'app.js'] as const
+/**
+ * `logo.png` はバイナリ。埋め込みもローカルの読み込みも **base64 の文字列**で
+ * 統一し（`__STATIC_ASSETS__` は JSON なので文字列しか持てない）、
+ * 配信の直前にだけバイトへ戻す。
+ */
+const ASSETS = ['index.html', 'styles.css', 'app.js', 'logo.png', 'robo.png'] as const
 export type AssetName = (typeof ASSETS)[number]
+
+const BINARY_ASSETS: ReadonlySet<AssetName> = new Set<AssetName>(['logo.png', 'robo.png'])
+
+/**
+ * `index.html` の中でアセットの版を差し込む場所。
+ *
+ * **`cache-control: no-cache` が効くのは HTML だけだった。**
+ * 実行環境の前段（Cloudflare）が拡張子で判断して、`.css` と `.js` に
+ * `max-age=14400` を上書きする。こちらのヘッダは残らない。
+ *
+ * 結果、デプロイ後もブラウザは 4 時間前の CSS と JS を使い続ける。
+ * **サーバが新しいものを返していても画面は古いまま**という、
+ * 最も気づきにくい壊れ方になる（実際に気づかれずにデモ直前まで来た）。
+ *
+ * ヘッダを通せない以上、**URL を変えるしかない。** コミットごとに
+ * `styles.css?v=<commit>` へ変わるので、前段のキャッシュは別物として扱う。
+ */
+const VERSION_TOKEN = '__ASSET_VERSION__'
 
 const CONTENT_TYPES: Record<AssetName, string> = {
   'index.html': 'text/html; charset=utf-8',
   'styles.css': 'text/css; charset=utf-8',
   'app.js': 'text/javascript; charset=utf-8',
+  'logo.png': 'image/png',
+  'robo.png': 'image/png',
 }
 
 /** ビルド時に埋め込まれた中身。tsx でのローカル起動時は定義されない */
@@ -48,8 +73,27 @@ export function setStaticAssetLoader(fn: AssetLoader | null): void {
 }
 
 function assetBody(name: AssetName): string | null {
-  return loader?.(name) ?? embedded[name] ?? null
+  const body = loader?.(name) ?? embedded[name] ?? null
+  // 版の差し込みはテキストのみ。index.html（CSS / JS / 画像の参照）に加えて、
+  // app.js も対象にする（JS が組み立てる <img>（ボットアイコン等）が使う）。
+  // バイナリは base64 文字列なので置換の対象にしない
+  if (body === null || (name !== 'index.html' && name !== 'app.js')) return body
+  // ローカル（ビルドなし）では毎回変える。編集がすぐ反映される方を取る
+  return body.replaceAll(VERSION_TOKEN, assetVersion())
 }
+
+/**
+ * アセットの版。デプロイした ZIP のコミットを使う。
+ *
+ * ローカルはコミットが `local` 固定になり、編集しても URL が変わらないので
+ * 起動時刻を混ぜる。ここだけは「毎回変わる」方が都合がよい。
+ */
+function assetVersion(): string {
+  const commit = typeof __BUILD_INFO__ !== 'undefined' ? __BUILD_INFO__.commit : 'local'
+  return commit === 'local' || commit === 'unknown' ? `dev-${startedAt}` : commit.slice(0, 12)
+}
+
+const startedAt = Date.now().toString(36)
 
 export function createStaticRoutes(): Hono {
   const routes = new Hono()
@@ -91,12 +135,25 @@ function sendAsset(c: Context, name: AssetName): Response {
     )
   }
 
-  return c.body(body, 200, {
+  const headers = {
     'content-type': CONTENT_TYPES[name],
-    // CDN を挟まない構成なので、キャッシュより「デプロイが即反映される」を取る。
-    // デモ中に古い画面が出る方が損失が大きい
+    /*
+      キャッシュより「デプロイが即反映される」を取る。デモ中に古い画面が出る方が
+      損失が大きい。
+
+      ★ ただし**このヘッダが残るのは HTML だけ**。実行環境の前段が
+        `.css` / `.js` / `.png` に `max-age=14400` を上書きする（deployment.md §4.4）。
+        そちらは `index.html` の `?v=` で URL を変えて跨いでいる。
+    */
     'cache-control': 'no-cache',
-  })
+  }
+
+  if (BINARY_ASSETS.has(name)) {
+    // base64 で持っている中身をバイトへ戻す。hono/aws-lambda は
+    // content-type がバイナリのとき isBase64Encoded で応答する
+    return c.body(Uint8Array.from(atob(body), (ch) => ch.charCodeAt(0)).buffer, 200, headers)
+  }
+  return c.body(body, 200, headers)
 }
 
 export { ASSETS }

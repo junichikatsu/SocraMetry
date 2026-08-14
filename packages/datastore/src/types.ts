@@ -75,6 +75,12 @@ export type HintRecord = {
 export type ConclusionRecord = {
   /** 冪等判定に使う本文のハッシュ（api-spec.md §4） */
   bodyHash: string
+  /**
+   * 利用者が書いた本文（マスキング済み）。**中断からの復旧に要る。**
+   * ハッシュだけだと、再開したときに自分が何を書いたか復元できない。
+   * `errorText` と同じくマスキング後を保存するので、扱うデータの種類は増えない。
+   */
+  body: string
   verdict: Verdict | null
   feedback: string
   at: number
@@ -120,6 +126,25 @@ export type SessionItem = {
   startedAt: number
   gateEnteredAt: { A: number; B: number | null; C: number | null }
   completedAt: number | null
+
+  /**
+   * 最後に操作した時刻。**中断の検出だけに使う。**
+   * 表示にも評価にも出さない（`startedAt` と違って利用者の目に触れない）。
+   */
+  lastSeenAt: number
+  /**
+   * 中断していた時間の合計。ゲートの時間条件から差し引く。
+   *
+   * **`startedAt` を書き換えない**のは、それが履歴の並びと表示に使われているため。
+   * 「いつ始めたか」は事実として動かさず、「どれだけ向き合っていたか」を別に持つ。
+   *
+   * 在席の判定は**書き込みを伴う操作があったか**で行う。心拍を持たないので、
+   * 画面を開いたまま何もしていない時間は中断と区別できない。
+   * 時間条件はどちらも「詰まった人を助ける安全弁」であり
+   * （socratic-engine.md §7 / P2）、評価のための計測ではないため、
+   * この粒度で足りると判断している。
+   */
+  awayMs: number
 
   turns: TurnItem[]
   hints: HintRecord[]

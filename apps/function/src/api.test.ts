@@ -1,6 +1,7 @@
 import { MOCK_DIAGNOSIS } from '@socrametry/llm'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { app } from './app'
+import { gateTimeouts } from './config'
 import { installFakeDataStore, uninstallFakeDataStore, type FakeDataStore } from './test-support/fake-datastore'
 
 /**
@@ -56,7 +57,7 @@ async function call(
   method: string,
   path: string,
   options: { body?: unknown; cookie?: string } = {},
-): Promise<{ status: number; body: Json; cookie: string | null }> {
+): Promise<{ status: number; body: Json; cookie: string | null; headers: Headers }> {
   const headers: Record<string, string> = {}
   if (options.body !== undefined) headers['content-type'] = 'application/json'
   if (options.cookie) headers['cookie'] = options.cookie
@@ -72,6 +73,8 @@ async function call(
     status: res.status,
     body: (await res.json()) as Json,
     cookie: setCookie ? (setCookie.split(';')[0] ?? null) : null,
+    // 契約はボディだけではない。Retry-After のように**ヘッダが仕様の一部**の応答がある
+    headers: res.headers,
   }
 }
 
@@ -290,6 +293,40 @@ describe('Gate A — ヒントのみ（FR-03）', () => {
     await call('POST', `/v1/sessions/${id}/diagnose`, { cookie })
     const lv2 = await call('POST', `/v1/sessions/${id}/hints`, { cookie })
     expect(lv2.body.hint.body).toBe(MOCK_DIAGNOSIS.gateAHints[1])
+  })
+
+  /**
+   * 時間経過による Gate A → B（FR-07 / #20）。
+   * Lambda は定期実行を持てないため、タイマーはクライアントに置く。
+   * サーバが渡すのは**残り時間だけ**で、発火条件はサーバ側にある。
+   */
+  it('ヒントを Lv3 まで開放すると、自動遷移までの残り時間が返る', async () => {
+    const cookie = await signIn()
+    const session = await startSession(cookie)
+    const id = session.session.id
+
+    // Lv3 に達するまでは発火しない（ヒントを読んでいる最中に送られない）
+    expect(session.session.autoAdvanceInMs).toBeNull()
+    const lv2 = await call('POST', `/v1/sessions/${id}/hints`, { cookie })
+    expect(lv2.body.session.autoAdvanceInMs).toBeNull()
+
+    const lv3 = await call('POST', `/v1/sessions/${id}/hints`, { cookie })
+    expect(lv3.body.session.autoAdvanceInMs).toBeGreaterThan(0)
+    // 絶対時刻ではなく残り時間。クライアントの時計とのずれを持ち込まない
+    expect(lv3.body.session.autoAdvanceInMs).toBeLessThanOrEqual(gateTimeouts().gateAMs)
+  })
+
+  it('Gate B に入った後は自動遷移の残り時間を返さない', async () => {
+    const cookie = await signIn()
+    const session = await startSession(cookie)
+    const id = session.session.id
+
+    await call('POST', `/v1/sessions/${id}/hints`, { cookie })
+    await call('POST', `/v1/sessions/${id}/hints`, { cookie })
+    const advanced = await call('POST', `/v1/sessions/${id}/advance`, { cookie })
+
+    expect(advanced.body.session.gate).toBe('B')
+    expect(advanced.body.session.autoAdvanceInMs).toBeNull()
   })
 })
 
@@ -782,6 +819,170 @@ describe('答えが Gate C 到達前に漏れない（DoD #2）', () => {
   })
 })
 
+/**
+ * 中断したセッションの復旧（#27）。
+ *
+ * 会話の記録は `sessions` に全部入っている。それを時系列に並べ直すだけなので、
+ * **答えが漏れる新しい経路は作られない**（正解 ID も内部診断も別テーブル / ADR-005）。
+ */
+/**
+ * 画面は「どのボタンを出してよいか」を `actions` だけで決めている
+ * （socratic-engine.md §7: 条件式をクライアントに持たせると必ずずれる）。
+ *
+ * **`session` を返す応答に `actions` が無いと、画面は 1 つ前の状態を出し続ける。**
+ * 実際、`advance` が `actions` を返しておらず、Gate B に入った後も
+ * 「設問に進む」（Gate A のボタン）が出たままになっていた。
+ */
+describe('session を返す応答には必ず actions が付く', () => {
+  it('Gate B に入った時点で「設問に進む」は消える', async () => {
+    const cookie = await signIn('actions-advance@example.com')
+    const id = (await startSession(cookie)).session.id
+
+    const advanced = await call('POST', `/v1/sessions/${id}/advance`, { cookie })
+
+    expect(advanced.body.session.gate).toBe('B')
+    expect(advanced.body.actions).toBeDefined()
+    // ★ Gate A のボタン。ここで false にならないと画面に出続ける
+    expect(advanced.body.actions.canAdvanceToQuestions).toBe(false)
+  })
+
+  it('セッションを返すすべての操作が actions を持つ', async () => {
+    const cookie = await signIn('actions-all@example.com')
+    const id = (await startSession(cookie)).session.id
+    await call('POST', `/v1/sessions/${id}/diagnose`, { cookie })
+
+    const responses = [
+      await call('POST', `/v1/sessions/${id}/hints`, { cookie }),
+      await call('GET', `/v1/sessions/${id}`, { cookie }),
+      await call('GET', `/v1/sessions/${id}/transcript`, { cookie }),
+      await call('POST', `/v1/sessions/${id}/advance`, { cookie }),
+      await call('POST', `/v1/sessions/${id}/conclusion`, {
+        cookie,
+        body: { body: 'コネクションのクローズ漏れだと考えます' },
+      }),
+    ]
+
+    for (const res of responses) {
+      if (res.body.session === undefined) continue
+      expect(res.body.actions, JSON.stringify(res.body.session)).toBeDefined()
+    }
+  })
+})
+
+describe('中断したセッションを復旧する', () => {
+  /** 保存済みのセッションの時刻を巻き戻し、中断があったことにする */
+  function rewind(sessionId: string, byMs: number): void {
+    const session = store.dump('sessions').find((s) => (s as Json).sessionId === sessionId) as Json
+    session.lastSeenAt = (session.lastSeenAt as number) - byMs
+  }
+
+  it('貼ったエラー・ヒント・設問・回答・原因宣言が時系列で返る', async () => {
+    const cookie = await signIn('transcript@example.com')
+    const id = (await startSession(cookie)).session.id
+
+    await call('POST', `/v1/sessions/${id}/diagnose`, { cookie })
+    await call('POST', `/v1/sessions/${id}/hints`, { cookie })
+    const advanced = await call('POST', `/v1/sessions/${id}/advance`, { cookie })
+    const question = advanced.body.question as Json
+    await call('POST', `/v1/sessions/${id}/answers`, {
+      cookie,
+      body: { questionId: question.id, selectedOptionId: correctOptionFor(id, 1) },
+    })
+    await call('POST', `/v1/sessions/${id}/conclusion`, {
+      cookie,
+      body: { body: 'コネクションのクローズ漏れでプールが枯渇していると考えます' },
+    })
+
+    const res = await call('GET', `/v1/sessions/${id}/transcript`, { cookie })
+    expect(res.status).toBe(200)
+
+    const entries = res.body.entries as Json[]
+    const kinds = entries.map((e) => e.kind)
+    expect(kinds[0]).toBe('error')
+    expect(kinds).toContain('hint')
+    expect(kinds).toContain('question')
+    expect(kinds).toContain('conclusion')
+
+    // 時系列に並んでいる
+    const times = entries.map((e) => e.at as number)
+    expect([...times].sort((a, b) => a - b)).toEqual(times)
+
+    // 回答済みの設問には選んだ選択肢とフィードバックが付く
+    const answered = entries.find((e) => e.kind === 'question') as Json
+    expect((answered.answer as Json).selectedOptionId).toBe(correctOptionFor(id, 1))
+
+    // **原因宣言の本文が戻る**（ハッシュだけだと再開時に復元できない）
+    const conclusion = entries.find((e) => e.kind === 'conclusion') as Json
+    expect(conclusion.body).toContain('クローズ漏れ')
+  })
+
+  it('Gate C の前は解説を含まない（DoD #2）', async () => {
+    const cookie = await signIn('transcript-leak@example.com')
+    const id = (await startSession(cookie)).session.id
+
+    await call('POST', `/v1/sessions/${id}/diagnose`, { cookie })
+    await call('POST', `/v1/sessions/${id}/advance`, { cookie })
+
+    const res = await call('GET', `/v1/sessions/${id}/transcript`, { cookie })
+    const dumped = JSON.stringify(res.body)
+
+    expect(dumped).not.toContain(MOCK_DIAGNOSIS.rootCause)
+    for (const evidence of MOCK_DIAGNOSIS.evidence) expect(dumped).not.toContain(evidence)
+    expect(dumped).not.toContain('correctOptionId')
+    expect((res.body.entries as Json[]).some((e) => e.kind === 'reveal')).toBe(false)
+  })
+
+  it('他人のセッションは復旧できない', async () => {
+    const owner = await signIn('transcript-owner@example.com')
+    const id = (await startSession(owner)).session.id
+    const other = await signIn('transcript-other@example.com')
+
+    const res = await call('GET', `/v1/sessions/${id}/transcript`, { cookie: other })
+    expect(res.status).toBe(404)
+  })
+
+  it('短い中断は差し引かれ、続きから再開できる', async () => {
+    const cookie = await signIn('resume@example.com')
+    const id = (await startSession(cookie)).session.id
+    await call('POST', `/v1/sessions/${id}/hints`, { cookie })
+    await call('POST', `/v1/sessions/${id}/hints`, { cookie })
+
+    // ヒントを Lv3 まで開けた時点で、自動遷移までの残り時間が動き出す
+    const before = await call('GET', `/v1/sessions/${id}/transcript`, { cookie })
+    expect(before.body.session.autoAdvanceInMs).toBeGreaterThan(0)
+
+    // 10 分席を外した（自動遷移の待ち時間 5 分より長い）
+    rewind(id, 10 * 60 * 1000)
+    const res = await call('GET', `/v1/sessions/${id}/transcript`, { cookie })
+
+    expect(res.body.session.status).toBe('active')
+    // ★ 開いた瞬間に設問へ飛ばされない。中断のぶんが差し引かれ、残り時間が生きている
+    expect(res.body.session.gate).toBe('A')
+    expect(res.body.session.autoAdvanceInMs).toBeGreaterThan(0)
+
+    // 差し引きが保存されている（次に開いたときも同じ扱いになる）
+    const stored = store.dump('sessions').find((s) => (s as Json).sessionId === id) as Json
+    expect(stored.awayMs).toBeGreaterThanOrEqual(10 * 60 * 1000)
+  })
+
+  it('打ち切りの時間を超えた中断は再開させない', async () => {
+    const cookie = await signIn('abandon@example.com')
+    const id = (await startSession(cookie)).session.id
+
+    rewind(id, 25 * 60 * 60 * 1000)
+    const res = await call('GET', `/v1/sessions/${id}/transcript`, { cookie })
+
+    // **勝手に完了にはしない。** 未解決のまま中断した事実として残す
+    expect(res.body.session.status).toBe('abandoned')
+    expect(res.body.session.reachedGate).toBeNull()
+
+    // 以降の操作は、完了ではなく中断として断る
+    const hint = await call('POST', `/v1/sessions/${id}/hints`, { cookie })
+    expect(hint.status).toBe(409)
+    expect(hint.body.error.message).toContain('中断')
+  })
+})
+
 describe('異常系で画面が止まらない（F12 / FR-17）', () => {
   it('不正な入力は 400 と原因を返す', async () => {
     const cookie = await signIn()
@@ -865,6 +1066,44 @@ describe('レート制限（NFR-O3 / F04）', () => {
 
     expect(third.status).toBe(429)
     expect(third.body.error.code).toBe('RATE_LIMITED')
+    delete process.env['RATE_LIMIT_SESSIONS_PER_HOUR']
+  })
+
+  /**
+   * 画面に「あと約 N 分」を出すための値。**これが無いと「しばらく待って」としか
+   * 言えず、待てば済むのか設定を見直すべきなのかを利用者が判断できない。**
+   * 同一オリジン配信（ADR-012）なので、ブラウザからヘッダをそのまま読める。
+   */
+  it('429 には待ち時間が Retry-After で載る', async () => {
+    process.env['RATE_LIMIT_SESSIONS_PER_HOUR'] = '1'
+    const cookie = await signIn('retry-after@example.com')
+
+    await startSession(cookie)
+    const blocked = await call('POST', '/v1/sessions', { cookie, body: { errorText: ERROR_TEXT } })
+
+    expect(blocked.status).toBe(429)
+    const retryAfter = Number(blocked.headers.get('retry-after'))
+    expect(Number.isFinite(retryAfter)).toBe(true)
+    expect(retryAfter).toBeGreaterThan(0)
+    // 窓は 1 時間。直前に作ったばかりなので、ほぼ 1 時間が残っている
+    expect(retryAfter).toBeLessThanOrEqual(3600)
+    delete process.env['RATE_LIMIT_SESSIONS_PER_HOUR']
+  })
+
+  /**
+   * MOCK_MODE が消すのは LLM だけ（ADR-014）。レート制限は
+   * データストア上の実データで判定するため、モックでも同じように効く。
+   * このテスト自体が MOCK_MODE=true で走っていることが、その担保になっている。
+   */
+  it('MOCK_MODE でもレート制限は効く（消えるのは LLM だけ）', async () => {
+    expect(ENV.MOCK_MODE).toBe('true')
+    process.env['RATE_LIMIT_SESSIONS_PER_HOUR'] = '1'
+    const cookie = await signIn('mock-rate@example.com')
+
+    await startSession(cookie)
+    const blocked = await call('POST', '/v1/sessions', { cookie, body: { errorText: ERROR_TEXT } })
+
+    expect(blocked.status).toBe(429)
     delete process.env['RATE_LIMIT_SESSIONS_PER_HOUR']
   })
 })

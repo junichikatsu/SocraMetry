@@ -1,627 +1,790 @@
-/*
-  ⚠️ 暫定スタイル。**正式なデザインで置き換える前提**。
-  PC 前提（レスポンシブは F17 Won't）。
-  フレームワークもビルド工程も持たない（ADR-013）。
+/* ==========================================================================
+   SocraMetry — スタイル（MOCK/SocraMetry_MOC*.html の意匠に合わせる）
 
-  見た目には投資せず、「状態が読めること」だけを優先している。
-*/
+   モックは Tailwind の CDN と Google Fonts を読んでいるが、ここでは使わない。
+   同一オリジンで関数が返す構成（ADR-012）なので、**外部ホストへの依存を
+   持ち込まない。** ネットワークが細い環境（テザリング計測 / #23）でも
+   スタイルが後から降ってこない。フォントも端末にあるものを使う。
+   ========================================================================== */
 
 :root {
-  --bg: #f6f7f9;
-  --surface: #ffffff;
-  --border: #d9dde3;
-  --text: #1b1f24;
-  --muted: #5b6470;
-  --accent: #2f5d8a;
-  --accent-strong: #24486b;
-  --danger: #8a2f2f;
-  --danger-bg: #fdf0f0;
-  --mock: #7a5c00;
-  --mock-bg: #fff8e1;
+  --brand: #6864d9;
+  --brand-ink: #5b57c9;
+  --brand-soft: #eef1ff;
+
+  --accent: #ee6793;
+  --accent-strong: #e5537f;
+  --accent-soft: #fdeaf1;
+  --accent-pale: #fff5f7;
+
+  --mint: #b1dcd8;
+  --mint-soft: #cfe9e5;
+  --mint-pale: #e8f5f3;
+
+  --ink: #1e293b;
+  --ink-2: #475569;
+  --ink-3: #64748b;
+  --ink-4: #94a3b8;
+
+  --line: #e2e8f0;
+  --line-soft: #eef2f7;
+  --surface: #fff;
+  --bg: #f8fafc;
+  --danger: #d9457a;
+
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-pill: 999px;
+
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.08);
+  --shadow-md: 0 4px 16px rgba(15, 23, 42, 0.08);
 }
 
-* {
-  box-sizing: border-box;
+* { box-sizing: border-box; }
+
+/* 画面の出し分けは `hidden` 属性で行う。その担保はファイル末尾（§最後）にある */
+
+html, body {
+  height: 100%;
+  margin: 0;
 }
 
 body {
-  margin: 0;
-  padding: 48px 24px 64px;
-  background: var(--bg);
-  color: var(--text);
-  font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", system-ui, sans-serif;
+  font-family: "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic UI",
+    "Meiryo", system-ui, sans-serif;
+  font-size: 15px;
   line-height: 1.7;
+  color: var(--ink);
+  background: var(--surface);
+  overflow: hidden;
 }
 
-.site-header,
-main,
-.site-footer {
-  max-width: 720px;
-  margin: 0 auto;
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; opacity: 0.45; }
+
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
 }
 
-.site-header__row {
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: var(--r-pill); }
+
+/* ── ロゴ ─────────────────────────────────────────────────────────────── */
+
+.brand { display: flex; align-items: center; gap: 14px; }
+
+/*
+ * ロゴ画像（assets/logo.png）。タイルの塗りも角丸も画像自身が持っているので、
+ * ここでは大きさだけを決める。背景色を敷かない（角は透過）。
+ */
+.brand__mark { width: 46px; height: 46px; object-fit: contain; }
+
+.brand__text { display: flex; flex-direction: column; line-height: 1.25; }
+.brand__name { font-size: 21px; font-weight: 800; letter-spacing: -0.01em; }
+.brand__sub { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; color: var(--ink-3); }
+
+/* ── ログイン ─────────────────────────────────────────────────────────── */
+
+.login { display: grid; grid-template-columns: 1fr 1fr; height: 100%; }
+
+.login__brand {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 44px 56px;
+  background: linear-gradient(150deg, var(--mint-soft), #f4fbfa 60%, #fff);
+  overflow: hidden;
+}
+
+.login__art {
+  position: relative;
+  flex: 1;
+  display: grid;
+  place-items: center;
+  min-height: 160px;
+}
+
+.login__glyph {
+  position: absolute;
+  color: rgba(100, 116, 139, 0.13);
+  font-size: 150px;
+  line-height: 1;
+}
+.login__glyph--int { left: 8%; }
+.login__glyph--lambda { right: 14%; bottom: 6%; font-size: 120px; }
+
+/*
+ * サービスロゴ（画像がタイル・角丸・ワードマークを持つ。ここでは大きさと影だけ）。
+ * 影は box-shadow ではなく drop-shadow。矩形ではなく**画像の透過形状に沿う**
+ */
+.login__mark {
+  width: 180px;
+  height: 180px;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 16px rgba(15, 23, 42, 0.18));
+}
+
+.login__lead { margin: 0; font-size: 34px; font-weight: 800; line-height: 1.35; letter-spacing: -0.02em; }
+.login__body { margin: 0; max-width: 48ch; color: var(--ink-2); font-size: 14px; }
+.login__foot { margin: 0; color: var(--ink-4); font-size: 12px; }
+
+.login__panel { display: grid; place-items: center; padding: 40px; overflow-y: auto; }
+.login__card { width: 100%; max-width: 440px; }
+.login__title { margin: 22px 0 4px; font-size: 26px; font-weight: 800; letter-spacing: -0.02em; }
+.login__note { margin: 0 0 22px; color: var(--ink-3); font-size: 13px; }
+.login__secure { margin: 18px 0 0; text-align: center; color: var(--ink-4); font-size: 12px; }
+
+.tabs { display: flex; gap: 6px; padding: 4px; border-radius: var(--r-pill); background: var(--bg); }
+
+.tab {
+  flex: 1;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--ink-3);
+  font-size: 14px;
+  font-weight: 700;
+}
+.tab[aria-selected="true"] { background: #fff; color: var(--brand-ink); box-shadow: var(--shadow-sm); }
+
+/* ── フォーム部品 ─────────────────────────────────────────────────────── */
+
+.form { display: flex; flex-direction: column; gap: 16px; }
+.field { display: flex; flex-direction: column; gap: 8px; }
+.field__label { display: flex; align-items: baseline; justify-content: space-between; font-size: 13px; font-weight: 700; }
+.field__aside, .field__hint { color: var(--ink-4); font-size: 11px; font-weight: 500; }
+
+.input {
+  height: 50px;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--mint-pale);
+}
+.input:focus { border-color: var(--brand); background: #fff; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 18px;
+  border: 1px solid transparent;
+  border-radius: var(--r-pill);
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+  font-size: 14px;
+  font-weight: 700;
+}
+.btn--primary { height: 52px; background: var(--accent); color: #fff; }
+.btn--primary:hover:not(:disabled) { background: var(--accent-strong); }
+.btn--block { width: 100%; }
+.btn--small { padding: 5px 12px; font-size: 12px; }
+.btn--ghost { border-color: var(--line); background: #fff; color: var(--ink-2); }
+.btn--ghost:hover:not(:disabled) { background: var(--bg); }
+/* モックの「追加する」の配色（ブランド紫の塗り） */
+.btn--brand { background: var(--brand); color: #fff; }
+.btn--brand:hover:not(:disabled) { background: var(--brand-ink); }
+.btn--quiet { background: transparent; color: var(--ink-3); }
+
+.alert {
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  border: 1px solid var(--accent-soft);
+  border-radius: var(--r-md);
+  background: var(--accent-pale);
+  color: var(--danger);
+  font-size: 13px;
+  white-space: pre-wrap;
+}
+.alert--float { position: absolute; z-index: 5; top: 76px; right: 24px; left: 24px; box-shadow: var(--shadow-md); background: #fff; }
+
+/* ── 本体レイアウト ───────────────────────────────────────────────────── */
+
+/*
+  ★ `grid-template-rows` と `.main` の `min-height` は、**どちらも消さないこと。**
+
+  グリッド項目の既定は `min-height: auto`（= 中身より小さくなれない）。
+  行を指定しないと暗黙の行は `auto` になり、**スレッドが伸びた分だけ .main が
+  画面より高くなる。** body が overflow: hidden なので、下端にある入力欄が
+  画面外に出て触れなくなる（実際にそうなっていた）。
+
+  .thread と .view には min-height: 0 を入れてあるが、それはフレックス側の話で、
+  **グリッド項目である .main には別途必要。** サイドバーが無事だったのは
+  overflow-y: auto を持っており、それが自動最小サイズを 0 にするため。
+
+  minmax(0, 1fr) と min-height: 0 は同じことを両側から言っている。
+  片方でも足りるが、**どちらを消しても壊れる**ことに気づける形にしておく。
+*/
+.app {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  grid-template-rows: minmax(0, 1fr);
+  height: 100%;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 26px 22px;
+  background: var(--mint);
+  overflow-y: auto;
+}
+.brand--side { margin-bottom: 18px; }
+
+.nav { display: flex; flex-direction: column; gap: 4px; }
+
+.nav__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 16px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+}
+.nav__item:hover:not(:disabled) { background: rgba(255, 255, 255, 0.45); }
+.nav__item.is-active { background: #fff; color: var(--brand-ink); box-shadow: var(--shadow-sm); }
+.nav__icon { width: 18px; text-align: center; font-size: 15px; }
+
+.nav__badge {
+  margin-left: auto;
+  padding: 1px 7px;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--ink-3);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.sidebar__foot { margin-top: auto; display: flex; flex-direction: column; gap: 10px; }
+.me { display: flex; align-items: center; gap: 12px; }
+
+.me__avatar {
+  display: grid;
+  place-items: center;
+  width: 38px; height: 38px;
+  border-radius: var(--r-pill);
+  background: var(--brand);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+.me__text { display: flex; flex-direction: column; line-height: 1.3; min-width: 0; }
+.me__name { font-size: 14px; font-weight: 700; }
+.me__mail { color: var(--ink-3); font-size: 11px; overflow: hidden; text-overflow: ellipsis; }
+
+/* min-height: 0 の理由は .app のコメント。消すと入力欄が画面外に出る */
+.main {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: #fff;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+  height: 66px;
+  padding: 0 26px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.topbar__title { font-size: 19px; font-weight: 800; letter-spacing: -0.01em; }
+.topbar__spacer { flex: 1; }
+.topbar__math { color: var(--ink-4); font-size: 15px; }
+
+.chip {
+  padding: 4px 12px;
+  border-radius: var(--r-pill);
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.chip--live { background: var(--mint-pale); color: #0f766e; }
+.chip--warn { background: var(--accent-soft); color: var(--danger); }
+.chip--bad { background: #fee2e2; color: #b91c1c; }
+
+.view { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.view--scroll { padding: 26px; gap: 16px; overflow-y: auto; }
+.view__title { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.01em; }
+.view__lead { margin: -10px 0 0; color: var(--ink-3); font-size: 13px; }
+
+/* ── 貼ったエラー（スレッド上部に固定）───────────────────────────────── */
+
+.errorlog {
+  flex-shrink: 0;
+  margin: 14px 26px 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.errorlog__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 14px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+.errorlog__head:hover { background: var(--line-soft); }
+
+.errorlog__mark { color: var(--ink-4); font-size: 10px; transition: transform 0.12s ease-out; }
+.errorlog[data-open="true"] .errorlog__mark { transform: rotate(90deg); }
+
+.errorlog__title { flex-shrink: 0; color: var(--ink-3); font-size: 12px; font-weight: 700; }
+
+/* 「30 行 / スタックトレース 12 行」。畳んだままでも全体の大きさが分かる */
+.errorlog__summary { flex: 1; min-width: 0; color: var(--ink-4); font-size: 11px; }
+.errorlog__action { flex-shrink: 0; color: var(--brand-ink); font-size: 11px; font-weight: 700; }
+
+.errorlog__body {
+  margin: 0;
+  padding: 4px 14px 10px 46px;
+  border-top: 1px solid var(--line-soft);
+  font-family: ui-monospace, "SFMono-Regular", "Consolas", monospace;
+  font-size: 12.5px;
+  line-height: 1.8;
+  /*
+    畳んでいても**隠さない。** 3 行ぶんだけ見せる。
+    完全に隠すと、常時表示にした意味（対象を見ながら考える）が無くなる。
+  */
+  max-height: 5.4em;
+  overflow: hidden;
+}
+.errorlog[data-open="true"] .errorlog__body { max-height: 34vh; overflow: auto; }
+
+.errorlog__line {
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+/* 行番号は ::marker が描く。本文をコピーしても番号は付いてこない */
+.errorlog__line::marker { color: var(--ink-4); font-size: 11px; }
+
+/* 例外名と本文。ここが読めるかどうかが観察軸そのもの */
+.errorlog__line--message { color: var(--ink); font-weight: 700; }
+/* スタックトレース。モックの配色に合わせる */
+.errorlog__line--frame { color: var(--accent-strong); }
+/* 例外の連鎖。ここから先は別の例外 */
+.errorlog__line--cause { color: var(--brand-ink); font-weight: 700; }
+
+/* マスキング済みの箇所。**何が伏せられたかを目で分かるようにする**（security.md §3） */
+.errorlog__redacted,
+.msg__code .errorlog__redacted {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--mint-soft);
+  color: #0f766e;
+  font-weight: 700;
+}
+
+/* ── スレッド ─────────────────────────────────────────────────────────── */
+
+.thread {
+  flex: 1;
+  min-height: 0;
+  padding: 26px 26px 8px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.msg { display: flex; gap: 14px; max-width: 760px; }
+.msg--user { margin-left: auto; flex-direction: row-reverse; }
+
+.msg__avatar {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 40px; height: 40px;
+  border-radius: var(--r-pill);
+  background: var(--brand-soft);
+  font-size: 18px;
+}
+
+/* SOCRA_BOT のアイコン。画像が円形と塗りを持つので、下地の色は敷かない */
+.msg__avatar--bot { background: transparent; }
+.msg__avatar-img { width: 100%; height: 100%; object-fit: contain; }
+
+.msg__bubble {
+  flex: 1;
+  min-width: 0;
+  padding: 16px 20px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-lg);
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+}
+.msg--user .msg__bubble { border-color: var(--mint-soft); background: var(--mint-pale); }
+
+.msg__who {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
+  margin-bottom: 8px;
+  color: var(--brand-ink);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
 }
+.msg__time { color: var(--ink-4); font-weight: 600; }
+.msg__lead { margin: 0 0 6px; font-size: 15px; font-weight: 700; }
+.msg__text { margin: 0; white-space: pre-wrap; word-break: break-word; }
+.msg__text + .msg__text { margin-top: 8px; }
 
-.chip {
-  padding: 4px 10px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--surface);
-  font-size: 13px;
-}
+.msg__note { margin: 8px 0 0; color: var(--ink-3); font-size: 11.5px; }
 
-h1 {
-  margin: 0;
-  font-size: 28px;
-  letter-spacing: 0.02em;
-}
-
-.tagline {
-  margin: 4px 0 16px;
-  color: var(--muted);
-  font-size: 14px;
-}
-
-.badge {
-  display: inline-block;
-  margin: 0 0 12px;
-  padding: 6px 12px;
-  border-radius: 4px;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.badge--mock {
-  background: var(--mock-bg);
-  color: var(--mock);
-  border: 1px solid currentColor;
-}
-
-.build-info {
-  margin: 0 0 24px;
-  color: var(--muted);
-  font-size: 12px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-
-.card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 24px;
-}
-
-.tabs {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 20px;
-  border-bottom: 1px solid var(--border);
-}
-
-.tab {
-  padding: 10px 16px;
-  border: none;
-  border-bottom: 2px solid transparent;
-  background: none;
-  color: var(--muted);
-  font: inherit;
-  font-size: 15px;
-  cursor: pointer;
-}
-
-.tab[aria-selected="true"] {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
-  font-weight: 700;
-}
-
-.form {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-label {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-input {
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
+.msg__code {
+  margin: 10px 0 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
   background: #fff;
-  color: inherit;
-  font: inherit;
-  font-weight: 400;
-}
-
-input:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-.hint {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 400;
-}
-
-button.primary,
-button.secondary {
-  padding: 11px 18px;
-  border-radius: 4px;
-  font: inherit;
-  font-size: 15px;
-  cursor: pointer;
-}
-
-button.primary {
-  border: 1px solid var(--accent-strong);
-  background: var(--accent);
-  color: #fff;
-  font-weight: 700;
-}
-
-button.secondary {
-  border: 1px solid var(--border);
-  background: #fff;
-  color: var(--text);
-}
-
-button:hover:not(:disabled) {
-  filter: brightness(1.08);
-}
-
-/* 送信中はボタンを無効にする。これは UX のためで、防御はサーバの冪等性（security.md §6） */
-button:disabled {
-  opacity: 0.55;
-  cursor: progress;
-}
-
-.kv {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 8px 20px;
-  margin: 0 0 20px;
-  font-size: 14px;
-}
-
-.kv dt {
-  color: var(--muted);
-}
-
-.kv dd {
-  margin: 0;
-}
-
-.mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 13px;
-}
-
-.actions {
-  display: flex;
-  gap: 8px;
-}
-
-.note {
-  margin: 16px 0 0;
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.error {
-  margin: 20px 0 0;
-  padding: 14px 16px;
-  border: 1px solid var(--danger);
-  border-radius: 4px;
-  background: var(--danger-bg);
-  color: var(--danger);
-  font-size: 14px;
-  /* エラー本文は改行や JSON を含みうるのでそのまま読める形にする */
+  color: var(--ink-2);
+  font-family: ui-monospace, "SFMono-Regular", "Consolas", monospace;
+  font-size: 12.5px;
+  line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
+  max-height: 320px;
+  overflow: auto;
 }
 
-.site-footer {
-  margin-top: 32px;
-  color: var(--muted);
-  font-size: 12px;
+/* 「対話的思考の問い」「選択問題（Gate B）」— モックのピンクのカード */
+.callout {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border-radius: var(--r-md);
+  background: var(--accent-soft);
 }
+.callout--calm { background: var(--mint-pale); }
+.callout__label { margin: 0 0 6px; color: var(--accent-strong); font-size: 13px; font-weight: 800; }
+.callout--calm .callout__label { color: #0f766e; }
+.callout__body { margin: 0; font-weight: 600; white-space: pre-wrap; }
 
-/* ── 暫定であることの明示 ─────────────────────────────────── */
-
-.badge--draft {
-  background: #eef1f5;
-  color: var(--muted);
-  border: 1px dashed var(--border);
-}
-
-/* ── 入力 ─────────────────────────────────────────────────── */
-
-textarea,
-select {
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: #fff;
-  color: inherit;
-  font: inherit;
-  font-weight: 400;
-}
-
-textarea {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 13px;
-  resize: vertical;
-}
-
-.required {
-  margin-left: 6px;
-  padding: 1px 6px;
-  border-radius: 3px;
-  background: var(--accent);
-  color: #fff;
-  font-size: 11px;
-}
-
-.row {
-  display: flex;
-  gap: 16px;
-}
-
-.row > label {
-  flex: 1;
-}
-
-.optional {
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 10px 14px;
-}
-
-.optional > summary {
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.optional__body {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  padding-top: 16px;
-}
-
-/* ── 進行状況 ─────────────────────────────────────────────── */
-
-.progress {
-  margin-bottom: 16px;
-}
-
-.progress__gates {
-  display: flex;
-  gap: 8px;
-}
-
-.gate {
-  flex: 1;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: #f2f4f7;
-  color: var(--muted);
-  font-size: 13px;
-  text-align: center;
-}
-
-.gate--current {
-  border-color: var(--accent);
-  background: #eaf1f8;
-  color: var(--accent);
-  font-weight: 700;
-}
-
-.gate--done {
-  background: var(--surface);
-  color: var(--text);
-}
-
-.stages {
-  display: flex;
-  gap: 6px;
-  margin: 12px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.stages__item {
-  flex: 1;
-  padding: 5px 8px;
-  border-bottom: 3px solid var(--border);
-  color: var(--muted);
-  font-size: 12px;
-  text-align: center;
-}
-
-.stages__item--current {
-  border-bottom-color: var(--accent);
-  color: var(--accent);
-  font-weight: 700;
-}
-
-.card + .card {
-  margin-top: 16px;
-}
-
-/* ── Gate A: ヒント ───────────────────────────────────────── */
-
-.hints {
-  margin: 0 0 20px;
-  padding: 0;
-  list-style: none;
-}
-
-.hints > li {
-  display: flex;
-  gap: 12px;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.hints__level {
-  flex: 0 0 auto;
-  color: var(--accent);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.hints__body {
-  flex: 1;
-}
-
-/* ── Gate B: 設問 ─────────────────────────────────────────── */
-
-.stage-label {
-  margin: 0 0 4px;
-  color: var(--accent);
-  font-size: 14px;
-}
-
-.question {
-  margin: 0 0 20px;
-  font-size: 18px;
-  font-weight: 700;
-  line-height: 1.6;
-}
-
-.options {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 20px;
-}
+.options { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
 
 .option {
-  padding: 12px 16px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
+  padding: 11px 15px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
   background: #fff;
-  color: inherit;
-  font: inherit;
-  font-size: 15px;
-  text-align: left;
-  cursor: pointer;
-}
-
-.option:hover:not(:disabled) {
-  border-color: var(--accent);
-  background: #f4f8fc;
-}
-
-.feedback {
-  margin: 0 0 16px;
-  padding: 12px 14px;
-  border-left: 3px solid var(--accent);
-  background: #f4f8fc;
   font-size: 14px;
+  text-align: left;
+}
+.option:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-pale); }
+
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+
+.hint-list { margin: 10px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.hint-list__item { display: flex; gap: 10px; }
+
+.hint-list__level {
+  flex-shrink: 0;
+  height: fit-content;
+  padding: 1px 8px;
+  border-radius: var(--r-pill);
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+  font-size: 11px;
+  font-weight: 700;
 }
 
-/* ── Gate C: 開示 ─────────────────────────────────────────── */
+.steps { margin: 8px 0 0; padding-left: 1.3em; }
+.steps li { margin: 2px 0; }
 
-.reveal {
+/* ヒントを読んでいる最中の表示（ADR-007: 進捗バーにしない） */
+.thinking { display: flex; align-items: center; gap: 10px; color: var(--ink-3); font-size: 14px; }
+.thinking__dots { display: inline-flex; gap: 4px; }
+
+.thinking__dots span {
+  width: 6px; height: 6px;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  animation: blink 1.2s infinite ease-in-out;
+}
+.thinking__dots span:nth-child(2) { animation-delay: 0.18s; }
+.thinking__dots span:nth-child(3) { animation-delay: 0.36s; }
+
+@keyframes blink { 0%, 60%, 100% { opacity: 0.25; } 30% { opacity: 1; } }
+
+.countdown { margin: 10px 0 0; color: var(--ink-3); font-size: 12px; }
+
+/*
+  Gate C の解放のされ方。`.countdown` と分けているのは、
+  自動遷移の予告を消すときに `.countdown` を一括で消しているため
+*/
+.gate-note { margin: 10px 0 0; color: var(--ink-4); font-size: 12px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .thinking__dots span { animation: none; opacity: 0.6; }
+}
+
+/* ── 進行の操作（入力欄の上に固定 / PR #33）──────────────────────────── */
+
+.gate-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.gate-actions__spacer { flex: 1; }
+.gate-actions__note { margin: 0; color: var(--ink-4); font-size: 12px; }
+
+.gate-btn {
+  padding: 12px 22px;
+  border: 0;
+  border-radius: var(--r-md);
+  font-size: 14px;
+  font-weight: 700;
+}
+/* 配色はモックのまま: ヒント=淡いピンク / 設問=ブランド紫 / 原因=アクセント */
+.gate-btn--hint { background: var(--accent-soft); color: var(--accent-strong); }
+.gate-btn--hint:hover:not(:disabled) { background: var(--accent-pale); }
+.gate-btn--advance { background: var(--brand); color: #fff; }
+.gate-btn--advance:hover:not(:disabled) { background: var(--brand-ink); }
+.gate-btn--declare { background: var(--accent); color: #fff; }
+.gate-btn--declare:hover:not(:disabled) { background: var(--accent-strong); }
+/*
+ * 宣言モード中、このボタンは「設問に戻る / 宣言をやめる」に変わる。
+ * 進む導線ではなく戻る導線なので、塗りをやめて控えめな見た目にする
+ */
+.gate-btn--declare[aria-pressed="true"] {
+  background: #fff;
+  color: var(--ink-2);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+/* ── ダイアログ（文脈の追加 / PR #33）────────────────────────────────── */
+
+.dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
   display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 12px 20px;
-  margin: 0 0 24px;
+  place-items: center;
+  background: rgba(15, 23, 42, 0.35);
 }
 
-.reveal dt {
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.reveal dd {
-  margin: 0;
-}
-
-.reveal ul {
-  margin: 0;
-  padding-left: 20px;
-}
-
-.retro {
-  padding-top: 20px;
-  border-top: 1px solid var(--border);
-}
-
-.retro h3 {
-  margin: 0 0 12px;
-  font-size: 16px;
-}
-
-/* ── 結果 ─────────────────────────────────────────────────── */
-
-.reached {
-  margin: 0 0 20px;
-  padding: 10px 14px;
-  border-radius: 4px;
-  background: #eaf1f8;
-  color: var(--accent);
-  font-weight: 700;
-}
-
-.lesson {
-  margin: 0 0 20px;
-  padding: 14px 16px;
-  border-left: 3px solid var(--accent);
-  background: #f4f8fc;
-  font-size: 15px;
-}
-
-.axes {
+.dialog__card {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: 16px;
+  width: min(520px, calc(100vw - 48px));
+  max-height: calc(100vh - 80px);
+  padding: 24px 28px;
+  border-radius: var(--r-lg);
+  background: #fff;
+  box-shadow: var(--shadow-md);
+  overflow-y: auto;
 }
+.dialog__title { margin: 0; font-size: 16px; font-weight: 800; }
+.dialog__code { height: auto; padding: 10px 14px; font-family: ui-monospace, "Consolas", monospace; font-size: 13px; resize: vertical; }
+.dialog__row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.dialog__row select { height: 44px; }
 
-.axis {
-  display: grid;
-  grid-template-columns: 80px 1fr 40px;
-  align-items: center;
+/* ── 入力欄 ───────────────────────────────────────────────────────────── */
+
+.composer { flex-shrink: 0; padding: 12px 26px 20px; border-top: 1px solid var(--line-soft); background: #fff; }
+
+.composer__form {
+  display: flex;
+  align-items: flex-end;
   gap: 12px;
-  font-size: 13px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--mint-pale);
 }
+.composer__meta { display: flex; align-items: center; gap: 8px; }
 
-.axis__bar {
-  height: 12px;
-  border-radius: 6px;
-  background: #e7eaee;
-  overflow: hidden;
+.select { display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: var(--r-md); background: #fff; }
+.select__label { color: var(--ink-4); font-size: 11px; font-weight: 700; }
+.select select { max-width: 108px; border: 0; background: transparent; font-size: 12px; }
+
+.composer__input {
+  flex: 1;
+  min-height: 26px;
+  max-height: 190px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  resize: none;
 }
+.composer__input:focus { outline: none; }
 
-.axis__fill {
-  height: 100%;
+.composer__side { display: flex; align-items: center; gap: 8px; }
+.composer__count { color: var(--ink-4); font-size: 11px; font-variant-numeric: tabular-nums; }
+
+.icon-btn { padding: 4px 6px; border: 0; border-radius: var(--r-sm); background: transparent; font-size: 15px; }
+
+.send {
+  display: grid;
+  place-items: center;
+  width: 40px; height: 40px;
+  border: 0;
+  border-radius: var(--r-pill);
   background: var(--accent);
+  color: #fff;
+  font-size: 17px;
 }
+.send:hover:not(:disabled) { background: var(--accent-strong); }
 
-.axis__value {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
+.composer__hint { margin: 8px 4px 0; color: var(--ink-3); font-size: 12px; }
+
+/* ── マスキングプレビュー（security.md §3 A）─────────────────────────── */
+
+.mask {
+  margin-bottom: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--mint-soft);
+  border-radius: var(--r-md);
+  background: var(--mint-pale);
 }
+.mask__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.mask__title { color: #0f766e; font-size: 12px; font-weight: 800; }
+.mask__title--hit { color: var(--danger); }
 
-.total {
-  margin: 0 0 20px;
-  font-size: 15px;
-  font-weight: 700;
+.mask__preview {
+  margin: 8px 0 0;
+  max-height: 150px;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  background: #fff;
+  font-family: ui-monospace, "SFMono-Regular", "Consolas", monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: auto;
 }
+.mask__note { margin: 8px 0 0; color: var(--ink-3); font-size: 11.5px; }
 
-.breakdown {
-  width: 100%;
-  margin-bottom: 20px;
-  border-collapse: collapse;
+/* ── ダッシュボード ───────────────────────────────────────────────────── */
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 16px 18px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-lg);
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+}
+.tile__label { color: var(--ink-3); font-size: 12px; font-weight: 600; }
+.tile__value { font-size: 28px; font-weight: 800; letter-spacing: -0.02em; }
+/* 3 つ並ぶタイル。28px のままだと枠から溢れる */
+.tile__value--triple { font-size: 20px; }
+.tile__sub { color: var(--ink-4); font-size: 11px; }
+
+.cards { display: grid; grid-template-columns: minmax(320px, 420px) 1fr; gap: 14px; align-items: start; }
+
+.card {
+  padding: 18px 20px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-lg);
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+}
+.card__title { margin: 0 0 4px; font-size: 15px; font-weight: 800; }
+.card__note { margin: 0 0 12px; color: var(--ink-3); font-size: 12px; }
+
+.radar { display: grid; place-items: center; }
+.radar svg { width: 100%; max-width: 320px; height: auto; }
+
+.legend { margin: 10px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.legend__item { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.legend__dot { width: 9px; height: 9px; border-radius: var(--r-pill); background: var(--accent); }
+.legend__value { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; }
+.legend__ability { color: var(--ink-4); font-size: 11px; }
+
+.todo { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+
+.todo__item {
+  display: flex;
+  align-items: center;
+  padding: 9px 12px;
+  border: 1px dashed var(--line);
+  border-radius: var(--r-md);
+  color: var(--ink-4);
   font-size: 13px;
 }
+.todo__item .nav__badge { background: var(--bg); }
 
-.breakdown th,
-.breakdown td {
-  padding: 6px 10px;
-  border-bottom: 1px solid var(--border);
-  text-align: left;
+/* ── 表 ───────────────────────────────────────────────────────────────── */
+
+.table-wrap { overflow-x: auto; border: 1px solid var(--line-soft); border-radius: var(--r-lg); }
+.table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.table th, .table td { padding: 9px 14px; border-bottom: 1px solid var(--line-soft); text-align: left; white-space: nowrap; }
+.table th { background: var(--bg); color: var(--ink-3); font-size: 11px; font-weight: 700; letter-spacing: 0.04em; }
+.table tr:last-child td { border-bottom: 0; }
+.table td:first-child { white-space: normal; min-width: 220px; }
+.table tbody tr:hover td, .table tr:hover td { background: var(--bg); }
+.table__actions { display: flex; gap: 6px; justify-content: flex-end; }
+
+/* 復旧したスレッドの、回答済みの選択肢。**押せない見た目にする** */
+.option--done { cursor: default; color: var(--ink-3); background: var(--bg); }
+.option--done:hover { border-color: var(--line); background: var(--bg); }
+.option--picked { border-color: var(--accent); color: var(--ink); background: var(--accent-pale); }
+
+.msg__bubble .table-wrap { margin-top: 10px; }
+
+/* F17（レスポンシブ）は Won't / v0.2。PC 前提（scope-v0.1.md §5）。
+   下は「狭い窓で完全に壊れない」ための最低限であり、対応の宣言ではない */
+@media (max-width: 1080px) {
+  .app { grid-template-columns: 220px 1fr; }
+  .cards { grid-template-columns: 1fr; }
+}
+@media (max-width: 760px) {
+  .login { grid-template-columns: 1fr; }
+  .login__brand { display: none; }
 }
 
-.breakdown th {
-  color: var(--muted);
-  font-weight: 700;
-}
+/* ==========================================================================
+   出し分け — ★ 必ずこのファイルの最後に置く
 
-/* ── 「先輩が考えている」演出（ADR-007）───────────────────── */
+   この画面はページ遷移を持たず、**すべての切替を `hidden` 属性で行う**。
+   ところが `hidden` を効かせているのはブラウザ標準スタイルの
+   `[hidden] { display: none }` で、これは**作者スタイルより弱い。**
+   クラス側に `display: flex` を 1 行書いた瞬間、`hidden` は黙って無効になる。
 
-.thinking {
-  margin: 20px 0 0;
-  padding: 12px 16px;
-  border: 1px dashed var(--border);
-  border-radius: 4px;
-  background: var(--surface);
-  color: var(--muted);
-  font-size: 14px;
-}
+   実際に、ログイン画面でログインと新規登録のフォームが同時に出ていた。
+   .login / .app / .form / .view / .select / .send が該当していた。
+   型検査にも lint にも出ない。**組み上げて計算済みスタイルを見るまで分からない。**
 
-/* ── 生レスポンス（API 確認用）─────────────────────────────── */
+   > **`!important` と「最後に置く」の両方をやる。**
+   > `!important` だけだと、実ブラウザでは勝つが、
+   > `!important` を解釈しない環境（テストで使う jsdom など）では負ける。
+   > 順序だけだと、クラス側に `!important` が付いた瞬間に負ける。
+   > **どちらの規則で解決されても勝つ形**にしておく。
+   >
+   > 検証は `src/visibility.test.js`。display を足したら、そこに id を足す。
+   ========================================================================== */
 
-.wire {
-  margin-top: 32px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-  padding: 12px 16px;
-}
-
-.wire > summary {
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.wire__body {
-  padding-top: 12px;
-}
-
-.wire__list {
-  margin: 12px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.wire__list > li {
-  margin-bottom: 8px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.wire__head {
-  padding: 6px 10px;
-  background: #f2f4f7;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
-}
-
-.wire__head--bad {
-  background: var(--danger-bg);
-  color: var(--danger);
-}
-
-.wire__head--wait {
-  background: var(--mock-bg);
-  color: var(--mock);
-}
-
-.wire__json {
-  margin: 0;
-  padding: 10px;
-  max-height: 220px;
-  overflow: auto;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11px;
-  line-height: 1.5;
-}
-
-code {
-  padding: 1px 5px;
-  border-radius: 3px;
-  background: #eef1f5;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
-}
+[hidden] { display: none !important; }

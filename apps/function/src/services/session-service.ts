@@ -12,6 +12,7 @@ import {
   precheckConclusion,
   raiseHintLevel,
   resolveTotalStages,
+  resumeFrom,
   revealGateReason,
   stageAt,
   ulid,
@@ -51,6 +52,8 @@ import type {
   SessionActions,
   SessionPublic,
   Stage,
+  TranscriptEntryPublic,
+  TranscriptPublic,
 } from '@socrametry/shared'
 import {
   demoMaxStages,
@@ -109,7 +112,54 @@ async function loadSession(auth: AuthContext, sessionId: string): Promise<Sessio
   // ★ メインキーに ownerId を含めるため、他人のセッションは「見つからない」に着地する
   const session = await sessionRepo.getSession(owner, sessionId)
   if (!session) throw errors.sessionNotFound()
+  await applyResume(session)
   return session
+}
+
+/**
+ * 中断からの復帰を反映する。**セッションを読むすべての経路がここを通る。**
+ *
+ * 判定そのものは `core` の `resumeFrom` にある。ここでやるのは、
+ * その結果を保存することだけ。
+ *
+ * 空白が短ければ何もしない（毎リクエストで書き込まない）。
+ * 差し引きか打ち切りが起きたときだけ書く。
+ */
+async function applyResume(session: SessionItem, now = Date.now()): Promise<void> {
+  if (session.status !== 'active') return
+
+  const decision = resumeFrom(session.lastSeenAt, now, gateTimeouts())
+  if (decision.kind === 'continue') {
+    // 書き込みを伴う操作がこの後に走れば、そのときに一緒に保存される
+    session.lastSeenAt = now
+    return
+  }
+
+  if (decision.kind === 'abandon') {
+    // **勝手に完了にはしない。** 未解決のまま中断した、という事実を残す
+    session.status = 'abandoned'
+  } else {
+    session.awayMs += decision.awayMs
+  }
+  session.lastSeenAt = now
+  await sessionRepo.putSession(session)
+}
+
+/**
+ * 進行中でなければ操作させない。
+ *
+ * **打ち切られた場合と完了した場合で文面を分ける。** どちらも
+ * 「このセッションは完了しています」と返すと、中断で終わった人に
+ * 「終わったつもりはないのに完了と言われる」という読み方をさせてしまう。
+ */
+function assertActive(session: SessionItem): void {
+  if (session.status === 'active') return
+  if (session.status === 'abandoned') {
+    throw errors.sessionCompleted(
+      'このセッションは長時間の中断により終了しています。新しいセッションを開始してください',
+    )
+  }
+  throw errors.sessionCompleted()
 }
 
 /**
@@ -192,6 +242,8 @@ export async function createSession(
     startedAt: now,
     gateEnteredAt: { A: now, B: null, C: null },
     completedAt: null,
+    lastSeenAt: now,
+    awayMs: 0,
     turns: [],
     hints: [{ gate: 'A', level: 1, body: hint.body, auto: true, at: now }],
     conclusions: [],
@@ -336,7 +388,7 @@ export async function openHint(
   sessionId: string,
 ): Promise<{ hint: HintPublic; session: SessionPublic; actions: SessionActions }> {
   const session = await loadSession(auth, sessionId)
-  if (session.status !== 'active') throw errors.sessionCompleted()
+  assertActive(session)
   if (!canRequestHint(session)) throw errors.hintExhausted()
 
   const level = nextHintLevel(session.hintLevel)
@@ -460,15 +512,24 @@ async function buildQuestion(
 export async function advanceToQuestions(
   auth: AuthContext,
   sessionId: string,
-): Promise<{ session: SessionPublic; question: QuestionPublic | null; pending?: PendingPublic }> {
+): Promise<{
+  session: SessionPublic
+  question: QuestionPublic | null
+  actions: SessionActions
+  pending?: PendingPublic
+}> {
   const session = await loadSession(auth, sessionId)
-  if (session.status !== 'active') throw errors.sessionCompleted()
+  assertActive(session)
 
   // 冪等: 既に Gate B なら現在の設問を返す（api-spec.md §4）
   if (session.gate === 'B') {
     const existing = pendingQuestion(session)
     if (existing) {
-      return { session: toSessionPublic(session), question: toQuestionPublic(sessionId, existing) }
+      return {
+        session: toSessionPublic(session),
+        question: toQuestionPublic(sessionId, existing),
+        actions: actionsOf(session),
+      }
     }
   } else {
     if (!canAdvanceToQuestions(gateStateOf(session))) throw errors.gateNotUnlocked()
@@ -480,7 +541,9 @@ export async function advanceToQuestions(
   }
 
   const stage = session.currentStage
-  if (!stage) return { session: toSessionPublic(session), question: null }
+  if (!stage) {
+    return { session: toSessionPublic(session), question: null, actions: actionsOf(session) }
+  }
 
   const diagnosis = await loadDiagnosis(session)
   // 診断待ちで 202 を返した後の再送でもここに来る。
@@ -494,6 +557,7 @@ export async function advanceToQuestions(
     return {
       session: toSessionPublic(session),
       question: null,
+      actions: actionsOf(session),
       pending: { reason: 'DIAGNOSIS_IN_PROGRESS', retryAfterMs: 3000 },
     }
   }
@@ -511,6 +575,7 @@ export async function advanceToQuestions(
   return {
     session: toSessionPublic(session),
     question: toQuestionPublic(sessionId, next.turn),
+    actions: actionsOf(session),
   }
 }
 
@@ -532,7 +597,7 @@ export async function submitAnswer(
   req: { questionId: string; selectedOptionId: string; elapsedMs?: number },
 ): Promise<AnswerOutcome> {
   const session = await loadSession(auth, sessionId)
-  if (session.status !== 'active') throw errors.sessionCompleted()
+  assertActive(session)
   if (session.gate !== 'B') throw errors.gateNotUnlocked('まだ設問に進んでいません')
 
   const parsed = parseQuestionId(req.questionId)
@@ -699,7 +764,7 @@ export async function declareConclusion(
   req: ConclusionRequest,
 ): Promise<ConclusionOutcome> {
   const session = await loadSession(auth, sessionId)
-  if (session.status !== 'active') throw errors.sessionCompleted()
+  assertActive(session)
   if (session.gate === 'C') throw errors.gateNotUnlocked('解説の表示後は原因宣言を受け付けません')
 
   // 自由記述もマスキング対象（FR-11: 判断基準は「その入力が LLM に届くか」）
@@ -778,7 +843,8 @@ export async function declareConclusion(
   const verdict = judged.judgement.verdict
   const feedback = judged.judgement.feedback
 
-  session.conclusions.push({ bodyHash: hash, verdict, feedback, at: Date.now() })
+  // 本文（マスキング済み）も残す。中断から再開したときに自分が何を書いたか復元できる
+  session.conclusions.push({ bodyHash: hash, body, verdict, feedback, at: Date.now() })
 
   if (verdict === 'reached') {
     // **どのゲートで到達したかが評価の内訳になる**（evaluation-model.md §2.2）
@@ -926,7 +992,7 @@ export async function retrospect(
   auth: AuthContext,
   sessionId: string,
   req: RetrospectRequest,
-): Promise<{ session: SessionPublic; reportPath: string }> {
+): Promise<{ session: SessionPublic; reportPath: string; actions: SessionActions }> {
   const session = await loadSession(auth, sessionId)
   if (session.gate !== 'C') throw errors.gateNotUnlocked('先に解説を読んでください')
 
@@ -940,7 +1006,11 @@ export async function retrospect(
   session.completedAt = session.completedAt ?? Date.now()
   await sessionRepo.putSession(session)
 
-  return { session: toSessionPublic(session), reportPath: reportPathOf(sessionId) }
+  return {
+    session: toSessionPublic(session),
+    reportPath: reportPathOf(sessionId),
+    actions: actionsOf(session),
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -963,6 +1033,107 @@ export async function getSessionState(
     session: toSessionPublic(session),
     question: current ? toQuestionPublic(sessionId, current) : null,
     hints: session.hints.map((h) => ({ level: h.level, body: h.body })),
+    actions: actionsOf(session),
+  }
+}
+
+/**
+ * 中断したセッションを画面に組み直すための記録（#27）。
+ *
+ * **`sessions` に入っているものを時系列に並べ直すだけ。**
+ * 正解 ID も内部診断もこのテーブルには無いので（ADR-005）、
+ * ここから答えが漏れる経路は構造として存在しない。
+ *
+ * 唯一の例外が開示（`reveal`）で、これは答えそのものなので
+ * **Gate C に到達している場合にだけ**読みにいく。
+ */
+export async function getTranscript(
+  auth: AuthContext,
+  sessionId: string,
+): Promise<TranscriptPublic> {
+  const session = await loadSession(auth, sessionId)
+  const entries: TranscriptEntryPublic[] = [
+    {
+      kind: 'error',
+      at: session.startedAt,
+      body: session.errorText,
+      language: session.language,
+    },
+  ]
+
+  for (const hint of session.hints) {
+    entries.push({
+      kind: 'hint',
+      at: hint.at,
+      level: hint.level,
+      body: hint.body,
+      auto: hint.auto,
+    })
+  }
+
+  for (const turn of session.turns) {
+    if (turn.kind !== 'question') continue
+    entries.push({
+      kind: 'question',
+      at: turn.askedAt,
+      stage: turn.stage,
+      seqInStage: turn.seqInStage,
+      body: turn.body,
+      options: turn.options,
+      answer:
+        turn.selectedOptionId === undefined
+          ? null
+          : {
+              selectedOptionId: turn.selectedOptionId,
+              isCorrect: turn.isCorrect ?? false,
+              feedback: turn.feedback ?? '',
+            },
+    })
+  }
+
+  for (const conclusion of session.conclusions) {
+    entries.push({
+      kind: 'conclusion',
+      at: conclusion.at,
+      // 古い記録には本文が無い（保存を始めたのが後のため）
+      body: conclusion.body ?? '',
+      verdict: conclusion.verdict,
+      feedback: conclusion.feedback,
+    })
+  }
+
+  if (session.gate === 'C') {
+    const stored = await secretRepo.getReveal(sessionId)
+    if (stored) {
+      entries.push({
+        kind: 'reveal',
+        at: session.gateEnteredAt.C ?? session.startedAt,
+        reveal: {
+          rootCause: stored.rootCause,
+          evidence: stored.evidence,
+          fixDirection: stored.fixDirection,
+          prevention: stored.prevention,
+        },
+      })
+    }
+  }
+
+  if (session.retrospection) {
+    entries.push({
+      kind: 'retrospection',
+      at: session.retrospection.at,
+      selectedOptionId: session.retrospection.selectedOptionId,
+    })
+  }
+
+  // 記録は種類ごとに集めたので、最後に時刻で並べ直す
+  entries.sort((a, b) => a.at - b.at)
+
+  const current = pendingQuestion(session)
+  return {
+    session: toSessionPublic(session),
+    entries,
+    question: current ? toQuestionPublic(sessionId, current) : null,
     actions: actionsOf(session),
   }
 }

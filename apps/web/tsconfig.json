@@ -1,0 +1,25 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // ブラウザで動く。Node の型は持ち込まない
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": [],
+    "allowJs": true,
+    "checkJs": true,
+
+    /*
+      JSDoc で書いた JS に `strict` をそのまま当てると、注釈の無い引数が
+      すべて `implicitly has an 'any' type` になり、**本当の誤りが埋もれる。**
+      ここで拾いたいのは次の 2 つで、どちらも下の設定で残る。
+
+        1. API 契約とのずれ（`@socrametry/shared` の公開型と突き合わせる）
+        2. 構文上の事故（セミコロン欠落で次行が呼び出しに解釈される等）
+    */
+    "strict": false,
+    "noImplicitAny": false,
+    "noUncheckedIndexedAccess": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false
+  },
+  "include": ["src/**/*.js"]
+}

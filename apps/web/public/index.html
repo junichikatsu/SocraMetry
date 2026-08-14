@@ -1,289 +1,313 @@
-<!doctype html>
+<!DOCTYPE html>
+<!--
+  SocraMetry — 画面（#27 / MOCK/ のデザインに沿う）
+
+  ★ このファイルは**構造だけ**を持つ。文言と分岐は app.js が入れる。
+    innerHTML を使わない構成のため（security.md §7）、DOM の器を
+    ここに置いておく方が、JS 側で組み立てるより読みやすい。
+-->
 <html lang="ja">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>SocraMetry</title>
-    <link rel="stylesheet" href="styles.css" />
-  </head>
-  <body>
-    <!--
-      ⚠️ 暫定実装。**正式なデザインのフロントエンドで置き換える前提**です。
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SocraMetry — AI Debug Training</title>
+<!--
+  ★ `?v=` を外さないこと。実行環境の前段が .css / .js に max-age を上書きするため、
+    URL を変えないとデプロイしても古いものが使われ続ける（apps/function/src/static.ts）。
+    値はサーバが配信時に差し込む。
+-->
+<link rel="stylesheet" href="styles.css?v=__ASSET_VERSION__" />
+<!--
+  サービスロゴ。原本は apps/web/assets/logo.png（ビルドが public/ へ配置し、
+  apps/function が /logo.png として配信する）。`?v=` の理由は styles.css と同じ。
+-->
+<link rel="icon" type="image/png" href="logo.png?v=__ASSET_VERSION__" />
+</head>
+<body>
 
-      目的は 2 つ。
-        1. 3 ゲートの導線が体験として成立しているかを画面で確かめる（F02）
-        2. 全 API を画面から叩けるようにする（curl を不要にする）
+<!-- ══ ログイン（未認証のときだけ全画面で出る）══════════════════════════ -->
+<div id="login" class="login" hidden>
+  <section class="login__brand">
+    <div class="brand">
+      <img class="brand__mark" src="logo.png?v=__ASSET_VERSION__" alt="" />
+      <span class="brand__text">
+        <span class="brand__name">SocraMetry</span>
+        <span class="brand__sub">AI DEBUG TRAINING</span>
+      </span>
+    </div>
+    <div class="login__art" aria-hidden="true">
+      <span class="login__glyph login__glyph--int">∫</span>
+      <span class="login__glyph login__glyph--lambda">λ</span>
+      <!-- サービスロゴ（画像自体がタイル + 横顔 + ワードマークの完全形） -->
+      <img class="login__mark login__mark--logo" src="logo.png?v=__ASSET_VERSION__" alt="SocraMetry" />
+    </div>
+    <h1 class="login__lead">問いから始まる、<br />真のデバッグ力をその手に。</h1>
+    <p class="login__body">
+      SocraMetry は、AI ソクラテスが提示する対話型デバッグトレーニングです。
+      コードを直すだけでなく、「なぜその問題が起きるのか」という本質的な思考を鍛え、
+      エンジニアとしてのデバッグスキルを測定・最大化します。
+    </p>
+    <p class="login__foot">© 2026 SocraMetry.</p>
+  </section>
 
-      置き換えやすさを優先し、次の形を守っています。
-        - ページ遷移なし。1 枚の HTML の中でセクションの表示を切り替える（ADR-013）
-        - API の呼び出しは app.js の api() に集約（この層は置き換え後も流用できる）
-        - 見た目には投資しない。CSS は 1 枚
-    -->
-    <header class="site-header">
-      <div class="site-header__row">
-        <h1>SocraMetry</h1>
-        <span id="me-chip" class="chip" hidden></span>
+  <section class="login__panel">
+    <div class="login__card">
+      <div class="tabs" role="tablist">
+        <button id="tab-login" class="tab" type="button" role="tab" aria-selected="true">ログイン</button>
+        <button id="tab-signup" class="tab" type="button" role="tab" aria-selected="false">新規登録</button>
       </div>
-      <p class="tagline">AI に答えを出させるのではなく、AI に問いを出させる。</p>
-      <p id="mock-badge" class="badge badge--mock" hidden>
-        MOCK モード — LLM を呼ばず固定応答を返しています
-      </p>
-      <p id="build-info" class="build-info"></p>
-      <p class="badge badge--draft">暫定画面（デザインは差し替え予定）</p>
+
+      <h2 id="login-title" class="login__title">アカウントにログイン</h2>
+      <p id="login-note" class="login__note">トレーニングセッションを開始するには資格情報を入力してください</p>
+
+      <form id="form-login" class="form">
+        <label class="field">
+          <span class="field__label">メールアドレス</span>
+          <input class="input" name="email" type="email" autocomplete="email" required placeholder="watanabe@example.com" />
+        </label>
+        <label class="field">
+          <span class="field__label">パスワード</span>
+          <input class="input" name="password" type="password" autocomplete="current-password" required minlength="8" />
+        </label>
+        <button class="btn btn--primary btn--block" type="submit">トレーニングルームに入る →</button>
+      </form>
+
+      <form id="form-signup" class="form" hidden>
+        <label class="field">
+          <span class="field__label">メールアドレス</span>
+          <input class="input" name="email" type="email" autocomplete="email" required placeholder="watanabe@example.com" />
+        </label>
+        <label class="field">
+          <span class="field__label">表示名</span>
+          <input class="input" name="displayName" type="text" autocomplete="nickname" required maxlength="40" />
+        </label>
+        <label class="field">
+          <span class="field__label">パスワード</span>
+          <input class="input" name="password" type="password" autocomplete="new-password" required minlength="8" />
+          <span class="field__hint">8 文字以上</span>
+        </label>
+        <!--
+          ★ placeholder を置かないこと。招待コードに書式の制約は無く
+            （`inviteCode` は 1〜200 文字の任意の文字列で、INVITE_CODE との完全一致）、
+            例を出すと存在しない書式を約束することになる。
+            本物らしく見えるため、そのまま打ち込まれる事故も起きる。
+        -->
+        <label class="field">
+          <span class="field__label">招待コード<span class="field__aside">※ 組織・イベントから配布されたコード</span></span>
+          <input class="input" name="inviteCode" type="text" required autocomplete="off" />
+        </label>
+        <button class="btn btn--primary btn--block" type="submit">登録してはじめる →</button>
+      </form>
+
+      <p id="login-error" class="alert" hidden></p>
+      <p class="login__secure">すべての通信は暗号化され、安全に保護されています。</p>
+    </div>
+  </section>
+</div>
+
+<!-- ══ 本体 ═══════════════════════════════════════════════════════════════ -->
+<div id="app" class="app" hidden>
+
+  <aside class="sidebar">
+    <div class="brand brand--side">
+      <img class="brand__mark" src="logo.png?v=__ASSET_VERSION__" alt="" />
+      <span class="brand__text">
+        <span class="brand__name">SocraMetry</span>
+        <span class="brand__sub">AI DEBUG TRAINING</span>
+      </span>
+    </div>
+
+    <!-- 並びとラベルは PR #33 の画面設計に合わせる -->
+    <nav class="nav">
+      <button id="nav-chat" class="nav__item is-active" type="button" data-view="chat">
+        <span class="nav__icon" aria-hidden="true">＋</span>新規セッション
+      </button>
+      <button id="nav-history" class="nav__item" type="button" data-view="history">
+        <span class="nav__icon" aria-hidden="true">▤</span>セッション一覧
+      </button>
+      <button class="nav__item" type="button" disabled>
+        <span class="nav__icon" aria-hidden="true">⌕</span>検索<span class="nav__badge">v0.2</span>
+      </button>
+      <!-- トレーニングプロジェクトの選択（演習モード / FR-34）。v0.2 -->
+      <button class="nav__item" type="button" disabled>
+        <span class="nav__icon" aria-hidden="true">▦</span>トレーニングメニュー<span class="nav__badge">v0.2</span>
+      </button>
+      <button id="nav-dashboard" class="nav__item" type="button" data-view="dashboard">
+        <span class="nav__icon" aria-hidden="true">▥</span>ダッシュボード
+      </button>
+      <button class="nav__item" type="button" disabled>
+        <span class="nav__icon" aria-hidden="true">⚙</span>設定<span class="nav__badge">v0.2</span>
+      </button>
+    </nav>
+
+    <div class="sidebar__foot">
+      <div class="me">
+        <span class="me__avatar">DEV</span>
+        <span class="me__text">
+          <span id="me-name" class="me__name"></span>
+          <span id="me-mail" class="me__mail"></span>
+        </span>
+      </div>
+      <button id="btn-logout" class="btn btn--ghost btn--small btn--block" type="button">ログアウト</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <span class="topbar__title">SocraMetry</span>
+      <span id="topbar-chip" class="chip">ソクラテス対話セッション</span>
+      <span id="mock-badge" class="chip chip--warn" hidden>MOCK モード — LLM を呼んでいません</span>
+      <span class="topbar__spacer"></span>
+      <span class="topbar__math" aria-hidden="true">∫ ∂x = λ</span>
+      <span id="health-chip" class="chip chip--live">AI: 接続確認中</span>
     </header>
 
-    <main>
-      <!-- ══ 未ログイン ══════════════════════════════════════ -->
-      <section id="auth" class="card" hidden>
-        <nav class="tabs" role="tablist">
-          <button id="tab-login" class="tab" type="button" role="tab" aria-selected="true">
-            ログイン
-          </button>
-          <button id="tab-signup" class="tab" type="button" role="tab" aria-selected="false">
-            はじめて使う
-          </button>
-        </nav>
+    <p id="error" class="alert alert--float" hidden></p>
 
-        <form id="form-login" class="form">
-          <label>
-            メールアドレス
-            <input name="email" type="email" autocomplete="username" required />
-          </label>
-          <label>
-            パスワード
-            <input name="password" type="password" autocomplete="current-password" required />
-          </label>
-          <button class="primary" type="submit">ログイン</button>
-        </form>
-
-        <form id="form-signup" class="form" hidden>
-          <label>
-            メールアドレス
-            <input name="email" type="email" autocomplete="username" required />
-          </label>
-          <label>
-            表示名
-            <input name="displayName" type="text" maxlength="40" required />
-          </label>
-          <label>
-            パスワード
-            <input name="password" type="password" autocomplete="new-password" required />
-            <span class="hint">8 文字以上</span>
-          </label>
-          <label>
-            招待コード
-            <input name="inviteCode" type="text" required />
-            <span class="hint">管理者から受け取ったコードを入力してください</span>
-          </label>
-          <button class="primary" type="submit">登録して始める</button>
-        </form>
+    <!-- ── 対話 ────────────────────────────────────────────────────────── -->
+    <section id="view-chat" class="view">
+      <!--
+        貼られたエラーを固定表示する。この画面は「エラーを正確に読めるか」を
+        測っているので（evaluation-model.md の観察軸）、対象がスクロールで
+        消えてはいけない。既定は畳んでおき、スレッドの縦を奪わない。
+      -->
+      <section id="errorlog" class="errorlog" hidden aria-label="貼ったエラー">
+        <button id="errorlog-toggle" class="errorlog__head" type="button" aria-expanded="false" aria-controls="errorlog-body">
+          <span class="errorlog__mark" aria-hidden="true">▶</span>
+          <span class="errorlog__title">貼ったエラー</span>
+          <span id="errorlog-summary" class="errorlog__summary"></span>
+          <span class="errorlog__action">全文</span>
+        </button>
+        <ol id="errorlog-body" class="errorlog__body"></ol>
       </section>
 
-      <!-- ══ エラー投稿 ══════════════════════════════════════ -->
-      <section id="compose" class="card" hidden>
-        <h2>詰まっているエラーを貼り付けてください</h2>
-        <form id="form-compose" class="form">
-          <label>
-            エラーテキスト<span class="required">必須</span>
-            <textarea name="errorText" rows="8" maxlength="20000" required
-              placeholder="スタックトレースを含めて、そのまま貼り付けてください"></textarea>
-            <span class="hint"><span id="count-error">0</span> / 20,000 文字</span>
-          </label>
+      <div id="thread" class="thread" aria-live="polite"></div>
 
-          <details class="optional">
-            <summary>関係するコードや状況を足す（任意）</summary>
-            <div class="optional__body">
-              <label>
-                コード断片
-                <textarea name="codeSnippet" rows="5" maxlength="10000"></textarea>
-              </label>
-              <label>
-                直前にした変更
-                <input name="recentChange" type="text" maxlength="1000"
-                  placeholder="APIのレスポンス形式を変えた" />
-                <span class="hint">「切り分け」の問いがここから作られます</span>
-              </label>
-              <div class="row">
-                <label>
-                  言語
-                  <select name="language" id="select-language"></select>
-                </label>
-                <label>
-                  フレームワーク
-                  <select name="framework" id="select-framework"></select>
-                </label>
-              </div>
-            </div>
-          </details>
-
-          <button class="primary" type="submit">エラーを見てもらう</button>
-        </form>
-
-        <p class="note">
-          入力は診断のため外部の LLM に送信されます。API キー・トークン・メールアドレス・
-          絶対パスは<strong>送信前にサーバ側で自動的に伏せます</strong>が、
-          <strong>顧客名などの固有名詞は自動では消えません</strong>。
-        </p>
-      </section>
-
-      <!-- ══ セッション進行（Gate A / B / C）════════════════════ -->
-      <section id="session" hidden>
-        <!-- 進行状況 -->
-        <div class="card progress">
-          <div class="progress__gates">
-            <span class="gate" data-gate="A">Gate A ヒント</span>
-            <span class="gate" data-gate="B">Gate B 設問</span>
-            <span class="gate" data-gate="C">Gate C 解説</span>
-          </div>
-          <ol id="stage-list" class="stages" hidden></ol>
-          <p id="diagnosis-state" class="note"></p>
+      <div class="composer">
+        <!--
+          進行の操作は入力欄の上に固定する（PR #33 の画面設計）。
+          スレッド内に置くと、会話が進むたびに古いボタンが残り続ける。
+          **どれを押せるかはサーバの actions に従う**（socratic-engine.md §7）。
+        -->
+        <div id="gate-actions" class="gate-actions" hidden>
+          <p id="gate-note" class="gate-actions__note" hidden></p>
+          <span class="gate-actions__spacer"></span>
+          <button id="btn-hint" class="gate-btn gate-btn--hint" type="button" hidden>ヒントに進む</button>
+          <button id="btn-advance" class="gate-btn gate-btn--advance" type="button" hidden>設問に進む</button>
+          <button id="btn-reveal" class="gate-btn gate-btn--advance" type="button" hidden>解説を読む</button>
+          <button id="btn-declare" class="gate-btn gate-btn--declare" type="button" hidden aria-pressed="false">原因が分かった</button>
         </div>
 
-        <!-- ── Gate A: ヒント ── -->
-        <div id="gate-a" class="card" hidden>
-          <h2>着眼点のヒント</h2>
-          <ul id="hint-list" class="hints"></ul>
-          <div class="actions">
-            <button id="btn-hint" class="secondary" type="button">もっとヒントが欲しい</button>
-            <button id="btn-advance" class="secondary" type="button">設問に進む</button>
-            <button id="btn-declare-a" class="primary" type="button">原因が分かった</button>
+        <!-- 送信前マスキングプレビュー（security.md §3 A）。常時表示のパネル -->
+        <div id="mask" class="mask" hidden>
+          <div class="mask__head">
+            <span id="mask-title" class="mask__title">送信前のマスキング結果</span>
+            <button id="mask-toggle" class="btn btn--ghost btn--small" type="button">閉じる</button>
           </div>
-          <p class="note">
-            ここで自力で解けるのが最良の結末です。設問に進むと<strong>戻れません</strong>。
+          <pre id="mask-preview" class="mask__preview"></pre>
+          <p class="mask__note">
+            この内容がサーバに送られます。ここで消えていない固有名詞（社名・顧客名など）は、
+            送信前にご自身で書き換えてください。
           </p>
         </div>
 
-        <!-- ── Gate B: 設問 ── -->
-        <div id="gate-b" class="card" hidden>
-          <h2 id="question-stage" class="stage-label"></h2>
-          <p id="question-body" class="question"></p>
-          <div id="option-list" class="options"></div>
-          <p id="answer-feedback" class="feedback" hidden></p>
-          <div class="actions">
-            <button id="btn-hint-b" class="secondary" type="button">ヒントが欲しい</button>
-            <button id="btn-declare-b" class="primary" type="button">原因が分かった</button>
-            <button id="btn-reveal" class="secondary" type="button" hidden>解説を読む</button>
+        <!-- 言語 / FW の選択はここには置かない。文脈の追加ダイアログに一本化した -->
+        <form id="form-compose" class="composer__form">
+          <div class="composer__meta">
+            <button class="icon-btn" type="button" disabled title="添付は v0.2">🖇</button>
           </div>
-        </div>
+          <textarea id="composer-input" class="composer__input" name="errorText" rows="1"
+            placeholder="デバッグ対象のコード、エラーログ、または仮説を入力してください…"></textarea>
+          <div class="composer__side">
+            <span id="composer-count" class="composer__count">0</span>
+            <button class="icon-btn" type="button" disabled title="音声入力は v0.2">🎤</button>
+            <button id="btn-send" class="send" type="submit" aria-label="送信">→</button>
+          </div>
+        </form>
+        <p id="composer-hint" class="composer__hint"></p>
+      </div>
 
-        <!-- ── 原因宣言 ── -->
-        <div id="conclusion" class="card" hidden>
-          <h2>何が原因だと思いますか？</h2>
-          <form id="form-conclusion" class="form">
-            <label>
-              自分の言葉で書いてください
-              <textarea name="body" rows="3" maxlength="2000" required
-                placeholder="APIの応答が返る前の初回レンダリングで items が undefined になっていた"></textarea>
+      <!--
+        文脈の追加（PR #33 / chat-screen-add-context-dialog）。
+        エラー送信後に「追加する」を選んだときだけ開く。すべて任意入力で、
+        既存 API の codeSnippet / recentChange にそのまま対応する。
+      -->
+      <div id="context-dialog" class="dialog" hidden role="dialog" aria-modal="true" aria-labelledby="context-title">
+        <form id="form-context" class="dialog__card">
+          <h2 id="context-title" class="dialog__title">▼ 関係するコードや状況を足す（任意）</h2>
+          <label class="field">
+            <span class="field__label">コード断片</span>
+            <textarea class="input dialog__code" name="codeSnippet" rows="4"></textarea>
+          </label>
+          <label class="field">
+            <span class="field__label">直前にした変更</span>
+            <input class="input" name="recentChange" type="text" placeholder="API のレスポンス形式を変えた" />
+            <span class="field__hint">「切り分け」の問いがここから作られます</span>
+          </label>
+          <div class="dialog__row">
+            <label class="field">
+              <span class="field__label">言語</span>
+              <select id="context-language" class="input" name="language"></select>
             </label>
-            <div class="actions">
-              <button class="primary" type="submit">判定してもらう</button>
-              <button id="btn-conclusion-cancel" class="secondary" type="button">やめる</button>
-            </div>
-          </form>
-          <p id="conclusion-feedback" class="feedback" hidden></p>
-          <div id="conclusion-choices" class="actions" hidden>
-            <button id="btn-back-to-questions" class="secondary" type="button">設問に戻る</button>
-            <button id="btn-reveal-2" class="secondary" type="button">解説を読む</button>
+            <label class="field">
+              <span class="field__label">フレームワーク</span>
+              <select id="context-framework" class="input" name="framework"></select>
+            </label>
           </div>
-        </div>
+          <button class="btn btn--primary btn--block" type="submit">エラーを見てもらう</button>
+        </form>
+      </div>
+    </section>
 
-        <!-- ── Gate C: 開示 ── -->
-        <div id="gate-c" class="card" hidden>
-          <h2>解説</h2>
-          <p class="note">
-            開示は敗北ではありません。業務を止めないための、正しい着地点の一つです。
+    <!-- ── ダッシュボード ──────────────────────────────────────────────── -->
+    <section id="view-dashboard" class="view view--scroll" hidden>
+      <h2 class="view__title">学習進捗 &amp; スキルアナリティクス</h2>
+      <p class="view__lead">デバッグ能力の測定と、直近のセッションの記録</p>
+
+      <div class="tiles">
+        <div class="tile"><span class="tile__label">セッション数</span><strong id="stat-sessions" class="tile__value">—</strong><span id="stat-sessions-sub" class="tile__sub"></span></div>
+        <!-- Gate A + B の割合。分母は完了セッションのみ（evaluation-model.md §2.2）-->
+        <div class="tile"><span class="tile__label">自力解決率</span><strong id="stat-self" class="tile__value">—</strong><span id="stat-self-sub" class="tile__sub"></span></div>
+        <!-- 3 つ並ぶので、1 つの数字を出す他のタイルより小さめの字にする -->
+        <div class="tile"><span class="tile__label">到達内訳</span><strong id="stat-gates" class="tile__value tile__value--triple">—</strong><span id="stat-gates-sub" class="tile__sub">Gate A / B / C</span></div>
+        <!-- 中身は correctRate（設問の正答率）。スコアではないのでそう呼ばない -->
+        <div class="tile"><span class="tile__label">設問の正答率</span><strong id="stat-avg" class="tile__value">—</strong><span id="stat-avg-sub" class="tile__sub"></span></div>
+        <div class="tile"><span class="tile__label">直近スコア</span><strong id="stat-last" class="tile__value">—</strong><span id="stat-last-sub" class="tile__sub"></span></div>
+      </div>
+
+      <div class="cards">
+        <div class="card">
+          <h3 class="card__title">デバッグ能力レーダー</h3>
+          <p id="radar-caption" class="card__note"></p>
+          <div id="radar" class="radar"></div>
+          <ul id="radar-legend" class="legend"></ul>
+        </div>
+        <div class="card">
+          <h3 class="card__title">v0.2 で入るもの</h3>
+          <p class="card__note">
+            週次のスコア推移・チーム内の比較・検索は v0.2（FR-24 / 組織ダッシュボード）です。
+            v0.1 の API はセッション単位の記録までしか返しません。
           </p>
-          <dl class="reveal">
-            <dt>原因</dt>
-            <dd id="reveal-cause"></dd>
-            <dt>根拠</dt>
-            <dd><ul id="reveal-evidence"></ul></dd>
-            <dt>修正方針</dt>
-            <dd id="reveal-fix"></dd>
-            <dt>再発防止</dt>
-            <dd id="reveal-prevention"></dd>
-          </dl>
-
-          <div id="retrospection" class="retro">
-            <h3 id="retro-question"></h3>
-            <div id="retro-options" class="options"></div>
-          </div>
+          <ul class="todo">
+            <li class="todo__item">週間デバッグスコア推移<span class="nav__badge">v0.2</span></li>
+            <li class="todo__item">チームランキング<span class="nav__badge">v0.2</span></li>
+            <li class="todo__item">全文検索<span class="nav__badge">v0.2</span></li>
+          </ul>
         </div>
+      </div>
+    </section>
 
-        <!-- ── 結果 ── -->
-        <div id="report" class="card" hidden>
-          <h2>振り返り</h2>
-          <p id="report-gate" class="reached"></p>
+    <!-- ── チャット一覧 ────────────────────────────────────────────────── -->
+    <section id="view-history" class="view view--scroll" hidden>
+      <h2 class="view__title">チャット一覧</h2>
+      <p class="view__lead">これまでのセッション（FR-24 の一覧のみ。推移グラフは v0.2）</p>
+      <button id="btn-reload-history" class="btn btn--ghost btn--small" type="button">再読み込み</button>
+      <div class="table-wrap"><table id="history-table" class="table"></table></div>
+    </section>
 
-          <h3>一般化された学び</h3>
-          <p id="report-lesson" class="lesson"></p>
+  </main>
+</div>
 
-          <h3>つまずいたところ</h3>
-          <p id="report-stumbling"></p>
-
-          <h3>次に同じ状況に出会ったら</h3>
-          <ol id="report-steps"></ol>
-
-          <h3>デバッグ脳スコア</h3>
-          <div id="score-axes" class="axes"></div>
-          <p id="score-total" class="total"></p>
-          <details class="optional">
-            <summary>算出根拠を見る</summary>
-            <div class="optional__body">
-              <p id="score-formula" class="mono"></p>
-              <table id="score-breakdown" class="breakdown"></table>
-            </div>
-          </details>
-
-          <h3>辿った道筋</h3>
-          <table id="report-path" class="breakdown"></table>
-
-          <h3>答え</h3>
-          <p id="report-answer"></p>
-
-          <!-- F11 / デモ台本 #6「コストログを見せる」 -->
-          <h3>このセッションのコスト</h3>
-          <p id="cost-summary" class="total"></p>
-          <table id="cost-table" class="breakdown"></table>
-
-          <div class="actions">
-            <button id="btn-new-session" class="primary" type="button">次のエラーを投げる</button>
-          </div>
-        </div>
-      </section>
-
-      <!-- ══ 履歴 ══════════════════════════════════════════ -->
-      <section id="history" class="card" hidden>
-        <h2>これまでのセッション</h2>
-        <table id="history-table" class="breakdown"></table>
-        <div class="actions">
-          <button id="btn-reload-history" class="secondary" type="button">読み込み直す</button>
-          <button id="btn-logout" class="secondary" type="button">ログアウト</button>
-        </div>
-      </section>
-
-      <!-- 「先輩が考えている」演出（ADR-007）。技術的制約を世界観に吸収させる -->
-      <p id="thinking" class="thinking" hidden></p>
-
-      <!-- 異常系は必ず画面に出す。原因が分からず止まる状態を作らない（F12 / FR-17） -->
-      <p id="error" class="error" hidden></p>
-
-      <!-- ══ 生レスポンス（API 確認用）══════════════════════ -->
-      <details id="wire" class="wire">
-        <summary>生レスポンス（API の確認用）</summary>
-        <div class="wire__body">
-          <p class="note">
-            直近 30 件のリクエストを新しい順に表示します。<code>202</code> の再送や
-            <code>409</code> の遷移条件など、画面では見えない挙動の確認に使えます。
-          </p>
-          <div class="actions">
-            <button id="btn-clear-wire" class="secondary" type="button">消す</button>
-          </div>
-          <ol id="wire-list" class="wire__list"></ol>
-        </div>
-      </details>
-    </main>
-
-    <script src="app.js"></script>
-  </body>
+<script src="app.js?v=__ASSET_VERSION__"></script>
+</body>
 </html>

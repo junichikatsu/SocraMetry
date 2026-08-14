@@ -12,6 +12,7 @@ import archiver from 'archiver'
 import { createWriteStream } from 'node:fs'
 import { cp, mkdir, readFile, rm, stat } from 'node:fs/promises'
 import { execFileSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 
 const OUT_DIR = 'build'
 const ZIP_PATH = 'socrametry-function.zip'
@@ -24,6 +25,12 @@ if (zipPackageJson.type === 'module') {
 }
 
 const commit = resolveCommit()
+
+// ── 0) フロントエンドを先にバンドルする ────────────────────────────────────
+// `apps/web/public/app.js` は生成物（ADR-013 改訂）。ここで作らずに読むと、
+// **古い app.js がそのまま ZIP に入る。**CI もデプロイもこのスクリプトを
+// 直接呼ぶ（turbo を経由しない）ため、依存関係ではなく明示的に呼ぶ。
+buildWeb()
 
 await rm(OUT_DIR, { recursive: true, force: true })
 await rm(ZIP_PATH, { force: true })
@@ -92,18 +99,28 @@ console.log(`${ZIP_PATH}  ${(size / 1024).toFixed(1)} KB  (commit: ${commit})`)
  * デプロイされる方が、原因を追う時間の損失が大きい。
  */
 async function readStaticAssets() {
-  const names = ['index.html', 'styles.css', 'app.js']
+  const names = ['index.html', 'styles.css', 'app.js', 'logo.png', 'robo.png']
   const entries = await Promise.all(
     names.map(async (name) => {
       const path = `../web/public/${name}`
       try {
-        return [name, await readFile(path, 'utf8')]
+        // バイナリは base64 の文字列として埋め込む（define は JSON しか持てない）
+        const encoding = name.endsWith('.png') ? 'base64' : 'utf8'
+        return [name, await readFile(path, { encoding })]
       } catch {
         throw new Error(`静的ファイルが見つかりません: ${path}`)
       }
     }),
   )
   return Object.fromEntries(entries)
+}
+
+/** `apps/web` のバンドルを実行する。失敗したらここで止める */
+function buildWeb() {
+  execFileSync(process.execPath, ['build.mjs'], {
+    cwd: fileURLToPath(new URL('../web/', import.meta.url)),
+    stdio: 'inherit',
+  })
 }
 
 /** CI では GITHUB_SHA、ローカルでは git から取る。どちらも無ければ unknown */

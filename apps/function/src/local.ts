@@ -10,14 +10,18 @@ logConfigIssues()
 /**
  * ローカルでは静的ファイルを**リクエストごとにディスクから読む**（ADR-012）。
  *
- * HTML / CSS / JS を編集したら、ビルドせずにリロードだけで反映される。
+ * HTML / CSS を編集したら、ビルドせずにリロードだけで反映される。
  * この読み込みは `local.ts` にだけ置く。ZIP のエントリポイントは `index.ts` なので、
  * **Lambda 側のバンドルに `node:fs` が入らない。**
+ *
+ * `app.js` だけは生成物（ADR-013）なので、`pnpm dev:web` の監視ビルドを
+ * 併走させる。読めない場合はここで WARN を出し、起動自体は止めない。
  */
 setStaticAssetLoader((name) => {
   const path = fileURLToPath(new URL(`../../web/public/${name}`, import.meta.url))
   try {
-    return readFileSync(path, 'utf8')
+    // バイナリは base64 で返す（static.ts が配信の直前にバイトへ戻す）
+    return readFileSync(path, name.endsWith('.png') ? 'base64' : 'utf8')
   } catch {
     console.warn(`静的ファイルが読めません: ${path}`)
     return null
