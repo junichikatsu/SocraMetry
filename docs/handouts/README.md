@@ -6,6 +6,11 @@
 |---|---|---|---|
 | コスト価格表 | [cost-pricing.html](cost-pricing.html) | cost-pricing.pdf / cost-pricing-landscape.pdf | [cost-model.md](../cost-model.md) |
 | セキュリティ説明 | [security.html](security.html) | security.pdf / security-landscape.pdf | [security.md](../security.md) |
+| コスト価格表・要点(横 1 枚) | [cost-pricing-summary.html](cost-pricing-summary.html) | cost-pricing-summary.pdf | 同上 |
+| セキュリティ説明・要点(横 1 枚) | [security-summary.html](security-summary.html) | security-summary.pdf | 同上 |
+
+要点版は原稿自体が横向き(`@page` に landscape 宣言)の 1 枚設計。
+スクリプトは横向き宣言済みの原稿からは縦横の複製を作らず、そのまま 1 つだけ生成する。
 
 ## PDF の再生成
 

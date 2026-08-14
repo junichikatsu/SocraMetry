@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>SocraMetry コスト価格表(要点)</title>
+<style>
+  @page {
+    size: A4 landscape;
+    margin: 10mm 12mm;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body {
+    font-family: "Yu Gothic UI", "Yu Gothic", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
+    font-size: 8.5pt;
+    line-height: 1.55;
+    color: #1a2333;
+  }
+
+  .doc-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    border-bottom: 2.5px solid #1e5aa8;
+    padding-bottom: 4px;
+    margin-bottom: 8px;
+  }
+  .brand { font-size: 7.5pt; color: #1e5aa8; font-weight: bold; letter-spacing: 0.06em; }
+  .doc-title { font-size: 15pt; font-weight: bold; line-height: 1.3; }
+  .doc-title small { font-size: 9pt; font-weight: normal; color: #4a5a72; }
+  .doc-meta { font-size: 7pt; color: #667085; text-align: right; }
+
+  /* 3 カラム */
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px;
+  }
+  .col { min-width: 0; }
+
+  h2 {
+    font-size: 9.5pt;
+    color: #1e5aa8;
+    border-left: 4px solid #1e5aa8;
+    padding-left: 6px;
+    margin: 8px 0 4px;
+  }
+  .col > h2:first-child { margin-top: 0; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 2px 0 4px;
+    font-size: 8pt;
+  }
+  th, td {
+    border: 1px solid #c9d4e3;
+    padding: 2px 5px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: #eaf1fa; font-weight: bold; }
+  td.num, th.num { text-align: right; }
+  tr.total td { background: #f5f8fc; font-weight: bold; }
+
+  .stats { display: flex; flex-direction: column; gap: 6px; }
+  .stat {
+    border: 1.5px solid #1e5aa8;
+    border-radius: 6px;
+    padding: 5px 10px;
+    text-align: center;
+  }
+  .stat .label { font-size: 7.5pt; color: #4a5a72; }
+  .stat .value { font-size: 15pt; font-weight: bold; color: #1e5aa8; line-height: 1.35; }
+  .stat .sub { font-size: 7pt; color: #667085; }
+
+  .diagram {
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 7pt;
+    line-height: 1.45;
+    background: #f5f8fc;
+    border: 1px solid #c9d4e3;
+    border-radius: 5px;
+    padding: 6px 8px;
+    margin: 2px 0 4px;
+    white-space: pre;
+  }
+
+  .note {
+    font-size: 7.5pt;
+    color: #4a5a72;
+    background: #f7f8fa;
+    border-left: 3px solid #98a6ba;
+    padding: 4px 8px;
+    margin: 2px 0 4px;
+  }
+  .caution {
+    font-size: 7.5pt;
+    background: #fff7e8;
+    border: 1px solid #e0b862;
+    border-radius: 5px;
+    padding: 4px 8px;
+    margin: 2px 0 4px;
+  }
+  .caution strong { color: #8a6100; }
+  .point { color: #1e5aa8; }
+
+  .doc-footer {
+    margin-top: 8px;
+    padding-top: 4px;
+    border-top: 1px solid #c9d4e3;
+    font-size: 6.5pt;
+    color: #98a6ba;
+    display: flex;
+    justify-content: space-between;
+  }
+</style>
+</head>
+<body>
+
+<header class="doc-header">
+  <div>
+    <div class="brand">SocraMetry — AI に答えを出させるのではなく、AI に問いを出させる。</div>
+    <div class="doc-title">コスト価格表 <small>要点(1 枚版)</small></div>
+  </div>
+  <div class="doc-meta">
+    2026-08-14 版 / 実測値は 2026-08-11 計測・請求突き合わせ済み<br>
+    詳細は「コスト価格表」全編を参照
+  </div>
+</header>
+
+<div class="grid">
+
+  <!-- 左: 実測の数字 -->
+  <div class="col">
+    <h2>実測の数字</h2>
+    <div class="stats">
+      <div class="stat">
+        <div class="label">1 セッションの原価(実測)</div>
+        <div class="value">4.9〜6.8 円</div>
+        <div class="sub">平均 6.0 円 / 0.0361 USD(1 USD = 165 円換算)</div>
+      </div>
+      <div class="stat">
+        <div class="label">1 人あたり月額原価(週 2 回利用)</div>
+        <div class="value">39〜55 円</div>
+        <div class="sub">月 8 セッション換算</div>
+      </div>
+      <div class="stat">
+        <div class="label">内部推定と実際の請求の差</div>
+        <div class="value">6%</div>
+        <div class="sub">クレジット消費と突き合わせ検証済み</div>
+      </div>
+    </div>
+
+    <h2>規模別の月額原価</h2>
+    <table>
+      <tr><th>利用規模(週 2 回)</th><th class="num">セッション/月</th><th class="num">月額原価</th></tr>
+      <tr><td>個人</td><td class="num">8</td><td class="num">39〜55 円</td></tr>
+      <tr><td>小チーム 10 名</td><td class="num">80</td><td class="num">390〜550 円</td></tr>
+      <tr><td>100 名</td><td class="num">800</td><td class="num">3,900〜5,500 円</td></tr>
+    </table>
+  </div>
+
+  <!-- 中央: なぜ安いか -->
+  <div class="col">
+    <h2>なぜ安いか — モデルの出し分け</h2>
+    <p><span class="point"><strong>難しい処理(原因の診断)は 1 回だけ。</strong></span>
+    回数の多い設問生成は安価モデルが担います。</p>
+
+    <div class="diagram">  Diagnoser(高品質・1 回)
+      │ focusHints(着眼点だけを渡す)
+      ├──▶ Hinter     (安価)
+      ├──▶ Questioner (安価)× 8〜12 回
+      └──▶ Judge      (安価)</div>
+
+    <table>
+      <tr><th>役割</th><th>モデル階層</th><th class="num">回数</th><th class="num">コスト占有率</th></tr>
+      <tr><td>Diagnoser / Revealer / Reporter</td><td><strong>高品質</strong></td><td class="num">2〜3</td><td class="num"><strong>96%</strong></td></tr>
+      <tr><td>Questioner / Judge / Hinter</td><td>安価</td><td class="num">10〜15</td><td class="num">4%</td></tr>
+    </table>
+
+    <p class="note">
+    設問 1 問あたりの原価は <strong>0.043 円</strong>。利用者が何問解いても原価はほとんど増えません
+    (100 問でも +4.3 円)。すべて高品質モデルの場合と比べ実測で <strong>45〜68% 削減</strong>。
+    </p>
+
+    <p><span class="point"><strong>原価は「セッションを何回開始したか」で決まります。</strong></span>
+    深く使うほど原価効率が上がる構造です。</p>
+  </div>
+
+  <!-- 右: 価格と守り -->
+  <div class="col">
+    <h2>参考価格と粗利構造</h2>
+    <div class="caution">
+      <strong>※ 販売価格は検討中です。</strong>ライセンス 1,000 円/人月と仮定した試算です。
+    </div>
+    <table>
+      <tr><th>利用頻度</th><th class="num">セッション/月</th><th class="num">原価(上限)</th><th class="num">粗利率</th></tr>
+      <tr><td><strong>週 2 回(想定利用)</strong></td><td class="num">8</td><td class="num">55 円</td><td class="num"><strong>94.5%</strong></td></tr>
+      <tr><td>1 日 2 回</td><td class="num">40</td><td class="num">273 円</td><td class="num">72.7%</td></tr>
+      <tr class="total"><td>損益分岐</td><td class="num">146</td><td class="num">1,000 円</td><td class="num">0%</td></tr>
+    </table>
+    <p>損益分岐は<strong>月 146 セッション/人(想定利用の 18 倍)</strong>。
+    現実的な利用でここに達することはありません。</p>
+
+    <h2>コストを守る仕組み</h2>
+    <table>
+      <tr><td>レート制限</td><td>セッション作成 10 回/時/メンバー。原価はセッション開始回数に比例するため、これが価格の防波堤</td></tr>
+      <tr><td>トークン上限</td><td>1 セッション 80,000 トークンで打ち切り</td></tr>
+      <tr><td>単価ログ</td><td>全 LLM 呼び出しを 1 リクエスト単位で記録。請求と照合済みの数字で語れる</td></tr>
+    </table>
+  </div>
+
+</div>
+
+<footer class="doc-footer">
+  <span>SocraMetry — コスト価格表・要点(ブース配布用)</span>
+  <span>数値の根拠: docs/cost-model.md v0.3(実測・請求突き合わせ済み)</span>
+</footer>
+
+</body>
+</html>

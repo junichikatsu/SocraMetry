@@ -60,8 +60,21 @@ const profileDir = path.join(handoutsDir, '.headless-profile.tmp')
 // Edge のランチャープロセスは即座に終了し、PDF の書き込みは別プロセスが
 // 非同期に行う。そのためプロセスの終了ではなく「出力ファイルが現れて
 // サイズが安定する」ことで完了を判定する。
+// ビューアや Edge が一時的にファイルを掴んでいることがあるためリトライする
+async function rmWithRetry(target) {
+  for (let i = 0; ; i++) {
+    try {
+      rmSync(target, { force: true })
+      return
+    } catch (e) {
+      if (i >= 10) throw new Error(`${path.basename(target)} を削除できません(他のプロセスが開いていませんか): ${e.code}`)
+      await sleep(300)
+    }
+  }
+}
+
 async function printToPdf(srcPath, outPath) {
-  rmSync(outPath, { force: true }) // 前回の出力を完了と誤認しないよう先に消す
+  await rmWithRetry(outPath) // 前回の出力を完了と誤認しないよう先に消す
   execFileSync(browser, [
     '--headless=new',
     '--disable-gpu',
@@ -96,12 +109,18 @@ async function printToPdf(srcPath, outPath) {
 try {
   for (const src of sources) {
     const srcPath = path.join(handoutsDir, src)
+    const html = readFileSync(srcPath, 'utf8')
+
+    // 原稿が最初から横向き(@page に landscape 宣言)なら、そのまま 1 つだけ生成する
+    if (/@page[^}]*landscape/.test(html)) {
+      await printToPdf(srcPath, path.join(handoutsDir, src.replace(/\.html$/, '.pdf')))
+      continue
+    }
 
     // 縦向き
     await printToPdf(srcPath, path.join(handoutsDir, src.replace(/\.html$/, '.pdf')))
 
     // 横向き
-    const html = readFileSync(srcPath, 'utf8')
     if (!html.includes('</head>')) throw new Error(`${src}: </head> が見つかりません`)
     const landscapeHtml = html.replace(
       '</head>',
