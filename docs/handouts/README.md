@@ -9,6 +9,7 @@
 | コスト価格表・要点(横 1 枚) | [cost-pricing-summary.html](cost-pricing-summary.html) | cost-pricing-summary.pdf | 同上 |
 | セキュリティ説明・要点(横 1 枚) | [security-summary.html](security-summary.html) | security-summary.pdf | 同上 |
 | サービス紹介・要点(横 1 枚) | [service-summary.html](service-summary.html) | service-summary.pdf | [README.md](../../README.md) / [evaluation-model.md](../evaluation-model.md) |
+| 審査基準への回答(横 1 枚) | [judging-summary.html](judging-summary.html) | judging-summary.pdf | 審査基準 8 項目に対する回答。数値は cost-model.md / security.md に基づく |
 
 要点版は原稿自体が横向き(`@page` に landscape 宣言)の 1 枚設計。
 スクリプトは横向き宣言済みの原稿からは縦横の複製を作らず、そのまま 1 つだけ生成する。
