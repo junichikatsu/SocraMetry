@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>SocraMetry サービス紹介(要点)</title>
+<style>
+  @page {
+    size: A4 landscape;
+    margin: 11mm 13mm;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body {
+    font-family: "Yu Gothic UI", "Yu Gothic", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
+    font-size: 10pt;
+    line-height: 1.7;
+    color: #1a2333;
+  }
+
+  .doc-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    border-bottom: 3px solid #1e5aa8;
+    padding-bottom: 6px;
+    margin-bottom: 14px;
+  }
+  .brand { font-size: 8.5pt; color: #1e5aa8; font-weight: bold; letter-spacing: 0.06em; }
+  .doc-title { font-size: 18pt; font-weight: bold; line-height: 1.3; }
+  .doc-title small { font-size: 10.5pt; font-weight: normal; color: #4a5a72; }
+  .doc-meta { font-size: 8pt; color: #667085; text-align: right; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 20px;
+  }
+  .col { min-width: 0; }
+
+  h2 {
+    font-size: 11.5pt;
+    color: #1e5aa8;
+    border-left: 4px solid #1e5aa8;
+    padding-left: 8px;
+    margin: 16px 0 8px;
+  }
+  .col > h2:first-child { margin-top: 0; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 4px 0 10px;
+    font-size: 9pt;
+  }
+  th, td {
+    border: 1px solid #c9d4e3;
+    padding: 4px 8px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: #eaf1fa; font-weight: bold; }
+  td:first-child { white-space: nowrap; }
+
+  .diagram {
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 8pt;
+    line-height: 1.55;
+    background: #f5f8fc;
+    border: 1px solid #c9d4e3;
+    border-radius: 5px;
+    padding: 8px 10px;
+    margin: 4px 0 10px;
+    white-space: pre;
+  }
+
+  .note {
+    font-size: 8.5pt;
+    color: #4a5a72;
+    background: #f7f8fa;
+    border-left: 3px solid #98a6ba;
+    padding: 6px 10px;
+    margin: 4px 0 10px;
+  }
+  .point { color: #1e5aa8; }
+
+  .stats-row { display: flex; gap: 12px; margin: 4px 0 10px; }
+  .stat {
+    flex: 1;
+    border: 1.5px solid #1e5aa8;
+    border-radius: 6px;
+    padding: 8px 10px;
+    text-align: center;
+  }
+  .stat .label { font-size: 8pt; color: #4a5a72; }
+  .stat .value { font-size: 14pt; font-weight: bold; color: #1e5aa8; line-height: 1.4; }
+  .stat .sub { font-size: 7.5pt; color: #667085; }
+
+  .doc-footer {
+    margin-top: 16px;
+    padding-top: 6px;
+    border-top: 1px solid #c9d4e3;
+    font-size: 7.5pt;
+    color: #98a6ba;
+    display: flex;
+    justify-content: space-between;
+  }
+</style>
+</head>
+<body>
+
+<header class="doc-header">
+  <div>
+    <div class="brand">SocraMetry(ソクラメトリ)</div>
+    <div class="doc-title">AI に答えを出させるのではなく、AI に問いを出させる。 <small>サービス紹介(1 枚版)</small></div>
+  </div>
+  <div class="doc-meta">
+    2026-08-14 版<br>
+    業務を止めずにデバッグ能力を鍛え、評価できる形で可視化する
+  </div>
+</header>
+
+<div class="grid">
+
+  <!-- 左: 課題と解決アプローチ -->
+  <div class="col">
+    <h2>課題 — AI で開発は速くなった。人は?</h2>
+    <p>エラーが出たら AI に貼り付け、修正コードをもらい、動いたので次へ。
+    <strong>なぜ壊れ、なぜ直ったかは分からないまま</strong>、次も同じ場所で詰まる——。</p>
+    <table>
+      <tr><td>1</td><td><strong>実力が見えない。</strong>AI が下駄を履かせ、成果物から地力を測れない</td></tr>
+      <tr><td>2</td><td><strong>育成が属人化。</strong>「エラーの読み方」を教えられるのは一部のシニアだけ</td></tr>
+      <tr><td>3</td><td><strong>評価が主観に寄る。</strong>技術力の評価が印象と自己申告に依存</td></tr>
+    </table>
+
+    <h2>解決 — AI を「問いを出す道具」に反転</h2>
+    <p>利用者は AI に<strong>直接質問できません</strong>。チャット欄はありません。
+    できるのはエラーを投げることと、問いに答えることだけ。</p>
+    <div class="diagram">  ✗ 従来        利用者 ─質問─▶ AI ─答え─▶ 利用者
+
+  ✓ SocraMetry  利用者 ─エラー─▶ AI エージェント
+                                │(原因を特定するが言わない)
+                利用者 ◀─問い───┘
+                   └─思考─▶ 自力で到達</div>
+    <p class="note">これは制限ではなく設計です。「AI に聞けば済む」という逃げ道を構造的に塞ぎます。</p>
+  </div>
+
+  <!-- 中央: 体験と測定 -->
+  <div class="col">
+    <h2>3 ゲート方式 — 段階的な開示</h2>
+    <p>答えは隠しっぱなしにせず、<strong>本人が到達を試みた後に開示</strong>します。</p>
+    <div class="diagram">  Gate A  ヒントのみ(設問なし)      ★★★ 自力解決
+     ↓ 進まないとき
+  Gate B  選択式の設問 Lv1観察〜Lv5修正 ★★ 誘導ありで到達
+     ↓ それでも未到達
+  Gate C  原因・根拠・修正方針を開示    ★ 開示による解決
+          + 振り返り 1 問(必須)</div>
+    <p><span class="point"><strong>どのゲートで解決したかが、そのまま評価値の主軸になります。</strong></span>
+    開示は敗北ではなく正しい着地点の一つ。業務を止めない設計です。</p>
+
+    <h2>デバッグ脳スコア — 5 軸で測る</h2>
+    <table>
+      <tr><td><strong>観察</strong></td><td>エラーを正確に読めるか</td></tr>
+      <tr><td><strong>切り分け</strong></td><td>問題箇所を絞れるか</td></tr>
+      <tr><td><strong>仮説</strong></td><td>原因を推論できるか</td></tr>
+      <tr><td><strong>検証</strong></td><td>仮説を確かめられるか</td></tr>
+      <tr><td><strong>修正</strong></td><td>再発しない直し方を選べるか</td></tr>
+    </table>
+    <p class="note">「技術力が高い / 低い」ではなく、<strong>「どこが強く、どこを伸ばすべきか」を言える形</strong>にします。
+    成長率を主指標とし、算出根拠は本人がいつでも確認できます。</p>
+  </div>
+
+  <!-- 右: 価値と安心材料 -->
+  <div class="col">
+    <h2>二重の価値</h2>
+    <table>
+      <tr><th>対象</th><th>得られるもの</th></tr>
+      <tr><td><strong>エンジニア</strong></td><td>業務のエラーが解決する。<strong>かつ</strong>、次から自力で解けるようになる</td></tr>
+      <tr><td><strong>組織</strong></td><td>デバッグ能力が<strong>数値で可視化</strong>され、育成と評価の根拠になる</td></tr>
+    </table>
+
+    <h2>社内のつまずきが資産になる</h2>
+    <div class="diagram">  実際に起きたエラー ─▶ 問答セッション ─▶ 匿名化・汎用化
+                                            │
+     新メンバーの演習問題 ◀── 社内問題集 ◀──┘</div>
+    <p>実務モード(自分のエラー)で成長を観察し、演習モード(共通問題)で公平に横比較。
+    <strong>組織固有のつまずきどころ</strong>が教材として蓄積されます。</p>
+
+    <h2>安心して導入できる設計</h2>
+    <div class="stats-row">
+      <div class="stat">
+        <div class="label">運用原価(実測・請求照合済み)</div>
+        <div class="value">約 5〜7 円</div>
+        <div class="sub">1 セッションあたり</div>
+      </div>
+      <div class="stat">
+        <div class="label">秘匿情報のマスキング</div>
+        <div class="value">二段構成</div>
+        <div class="sub">送信前にプレビューで確認可能</div>
+      </div>
+    </div>
+    <p class="note">詳細は別紙「コスト価格表」「セキュリティ説明」をご覧ください。</p>
+  </div>
+
+</div>
+
+<footer class="doc-footer">
+  <span>SocraMetry — サービス紹介・要点(ブース配布用)</span>
+  <span>根拠: README.md / docs/evaluation-model.md ほか設計書一式</span>
+</footer>
+
+</body>
+</html>
