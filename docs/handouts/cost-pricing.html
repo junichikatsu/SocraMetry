@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>SocraMetry コスト価格表</title>
+<style>
+  @page {
+    size: A4;
+    margin: 14mm 16mm;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body {
+    font-family: "Yu Gothic UI", "Yu Gothic", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.7;
+    color: #1a2333;
+  }
+
+  /* ── ヘッダ ── */
+  .doc-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    border-bottom: 3px solid #1e5aa8;
+    padding-bottom: 8px;
+    margin-bottom: 14px;
+  }
+  .brand { font-size: 9pt; color: #1e5aa8; font-weight: bold; letter-spacing: 0.08em; }
+  .doc-title { font-size: 20pt; font-weight: bold; line-height: 1.3; }
+  .doc-meta { font-size: 8pt; color: #667085; text-align: right; }
+
+  .lead { margin-bottom: 14px; }
+  .lead strong { color: #1e5aa8; }
+
+  h2 {
+    font-size: 12.5pt;
+    color: #1e5aa8;
+    border-left: 5px solid #1e5aa8;
+    padding-left: 8px;
+    margin: 18px 0 8px;
+    break-after: avoid;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 6px 0 10px;
+    font-size: 9.5pt;
+  }
+  th, td {
+    border: 1px solid #c9d4e3;
+    padding: 4px 8px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: #eaf1fa; font-weight: bold; }
+  tr { break-inside: avoid; }
+  td.num, th.num { text-align: right; }
+  tr.total td { background: #f5f8fc; font-weight: bold; }
+
+  .highlight-box {
+    display: flex;
+    gap: 10px;
+    margin: 10px 0 14px;
+  }
+  .stat {
+    flex: 1;
+    border: 1.5px solid #1e5aa8;
+    border-radius: 6px;
+    padding: 8px 12px;
+    text-align: center;
+  }
+  .stat .label { font-size: 8.5pt; color: #4a5a72; }
+  .stat .value { font-size: 17pt; font-weight: bold; color: #1e5aa8; line-height: 1.4; }
+  .stat .sub { font-size: 8pt; color: #667085; }
+
+  .diagram {
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 8.5pt;
+    line-height: 1.5;
+    background: #f5f8fc;
+    border: 1px solid #c9d4e3;
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 8px 0 10px;
+    white-space: pre;
+  }
+
+  .note {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    font-size: 8.5pt;
+    color: #4a5a72;
+    background: #f7f8fa;
+    border-left: 3px solid #98a6ba;
+    padding: 6px 10px;
+    margin: 6px 0 10px;
+  }
+  .caution {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    font-size: 9pt;
+    background: #fff7e8;
+    border: 1px solid #e0b862;
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin: 8px 0 12px;
+  }
+  .caution strong { color: #8a6100; }
+
+  .doc-footer {
+    margin-top: 18px;
+    padding-top: 6px;
+    border-top: 1px solid #c9d4e3;
+    font-size: 7.5pt;
+    color: #98a6ba;
+    display: flex;
+    justify-content: space-between;
+  }
+  .page-break { break-before: page; }
+</style>
+</head>
+<body>
+
+<header class="doc-header">
+  <div>
+    <div class="brand">SocraMetry — AI に答えを出させるのではなく、AI に問いを出させる。</div>
+    <div class="doc-title">コスト価格表</div>
+  </div>
+  <div class="doc-meta">
+    2026-08-14 版<br>
+    実測値は 2026-08-11 計測・請求突き合わせ済み
+  </div>
+</header>
+
+<p class="lead">
+SocraMetry は 1 回の学習セッションで LLM を 10〜15 回呼びますが、
+<strong>1 セッションの原価は約 5〜7 円</strong>です。
+本書はその実測値と、安さを支える設計、および規模別の費用感をまとめたものです。
+</p>
+
+<div class="highlight-box">
+  <div class="stat">
+    <div class="label">1 セッションの原価(実測)</div>
+    <div class="value">4.9〜6.8 円</div>
+    <div class="sub">平均 6.0 円 / 0.0361 USD</div>
+  </div>
+  <div class="stat">
+    <div class="label">1 人あたり月額原価(週 2 回利用)</div>
+    <div class="value">39〜55 円</div>
+    <div class="sub">月 8 セッション換算</div>
+  </div>
+  <div class="stat">
+    <div class="label">実測と請求の差</div>
+    <div class="value">6%</div>
+    <div class="sub">クレジット消費と突き合わせ検証済み</div>
+  </div>
+</div>
+
+<h2>1. なぜ安いか — モデルの出し分けがそのままコスト設計</h2>
+
+<p>
+LLM 呼び出しには性質のはっきりした偏りがあります。
+<strong>難しい処理(原因の診断)は 1 回だけ</strong>、残りの 10 回以上は速度と制約遵守だけが要る簡単な処理です。
+この偏りに合わせて、役割ごとにモデルを出し分けます。
+</p>
+
+<div class="diagram">  Diagnoser(高品質モデル・1 回)
+      │  focusHints(着眼点だけを渡す。結論は渡さない)
+      ├──────▶ Hinter      (安価モデル)
+      ├──────▶ Questioner  (安価モデル)× 8〜12 回
+      └──────▶ Judge       (安価モデル)</div>
+
+<table>
+  <tr><th>役割</th><th>何をするか</th><th>モデル階層</th><th class="num">回数/セッション</th><th class="num">コスト占有率(実測)</th></tr>
+  <tr><td>Diagnoser</td><td>エラーから原因・着眼点を特定</td><td><strong>高品質</strong></td><td class="num">1</td><td class="num">43.0%</td></tr>
+  <tr><td>Revealer</td><td>最終ゲートの解説を生成</td><td><strong>高品質</strong></td><td class="num">0〜1</td><td class="num">29.1%</td></tr>
+  <tr><td>Reporter</td><td>振り返りと学びの言語化</td><td><strong>高品質</strong></td><td class="num">1</td><td class="num">24.0%</td></tr>
+  <tr><td>Questioner</td><td>選択式の設問を生成</td><td>安価</td><td class="num">8〜12</td><td class="num">3.4%</td></tr>
+  <tr><td>Judge</td><td>原因宣言の到達判定</td><td>安価</td><td class="num">1〜3</td><td class="num">0.3%</td></tr>
+  <tr><td>Hinter</td><td>最初のヒントを生成</td><td>安価</td><td class="num">1</td><td class="num">0.2%</td></tr>
+</table>
+
+<p class="note">
+高品質モデルを使うのは「1 回しか呼ばれない場所」だけ。回数の多い設問生成は安価モデルが担うため、
+<strong>設問 1 問あたりの原価は 0.043 円</strong>。利用者が何問解いても原価はほとんど増えません。
+すべて高品質モデルで処理した場合と比べ、実測で <strong>45〜68% の削減</strong>(設問数に依存)になります。
+</p>
+
+<h2>2. 1 セッションの原価(実測)</h2>
+
+<table>
+  <tr><th>ケース</th><th class="num">LLM 呼び出し</th><th class="num">原価(USD)</th><th class="num">原価(円)</th></tr>
+  <tr><td>最初のゲートで自力解決</td><td class="num">4 回</td><td class="num">0.0295</td><td class="num">約 4.9 円</td></tr>
+  <tr><td>実測 3 セッションの平均</td><td class="num">—</td><td class="num">0.0361</td><td class="num">約 6.0 円</td></tr>
+  <tr><td>最終ゲートまで到達(全 5 段階出題)</td><td class="num">10 回</td><td class="num">0.0414</td><td class="num">約 6.8 円</td></tr>
+</table>
+
+<p class="note">
+円換算は 1 USD = 165 円(直近 2 か月の実勢 155〜162 円の上限より上に固定。
+見積もりの誤差を「実際より高く見積もる」安全側に倒しています)。
+金額は内部推定を実際のクレジット消費と突き合わせ、差 6% であることを確認済みです。
+</p>
+
+<h2>3. 規模別の月額原価</h2>
+
+<table>
+  <tr><th>利用規模</th><th class="num">セッション/月</th><th class="num">月額原価(下限〜上限)</th></tr>
+  <tr><td>個人(週 2 回)</td><td class="num">8</td><td class="num">39〜55 円</td></tr>
+  <tr><td>小チーム 10 名(週 2 回)</td><td class="num">80</td><td class="num">390〜550 円</td></tr>
+  <tr><td>100 名(週 2 回)</td><td class="num">800</td><td class="num">3,900〜5,500 円</td></tr>
+</table>
+
+<p>
+原価は「セッションを何回開始したか」でほぼ決まります。
+1 セッションの中で利用者がどれだけ深く考え、何問解いても、原価はほとんど動きません
+(設問 100 問でも +4.3 円)。<strong>製品の価値が出る「深く使う」ほど原価効率が上がる構造</strong>です。
+</p>
+
+<h2>4. 参考価格と粗利構造</h2>
+
+<div class="caution">
+<strong>※ 販売価格は検討中です。</strong>以下はライセンスを 1,000 円/人月と仮定した場合の試算であり、
+正式な提供価格ではありません。
+</div>
+
+<table>
+  <tr><th>利用頻度</th><th class="num">月間セッション</th><th class="num">原価(上限で計算)</th><th class="num">粗利率</th></tr>
+  <tr><td><strong>週 2 回(想定利用)</strong></td><td class="num">8</td><td class="num">55 円</td><td class="num"><strong>94.5%</strong></td></tr>
+  <tr><td>週 5 回</td><td class="num">20</td><td class="num">137 円</td><td class="num">86.3%</td></tr>
+  <tr><td>1 日 2 回</td><td class="num">40</td><td class="num">273 円</td><td class="num">72.7%</td></tr>
+  <tr class="total"><td>損益分岐</td><td class="num">146</td><td class="num">1,000 円</td><td class="num">0%</td></tr>
+</table>
+
+<p>
+損益分岐は 1 人あたり<strong>月 146 セッション(営業日で約 7 回/日)</strong>。
+想定利用(週 2 回)の 18 倍にあたり、現実的な利用でここに達することはありません。
+さらにレート制限(10 セッション/時/メンバー)とセッションあたりのトークン上限が、
+コストの上振れを構造的に防いでいます。
+</p>
+
+<h2>5. コスト管理の仕組み</h2>
+
+<table>
+  <tr><th>仕組み</th><th>内容</th></tr>
+  <tr><td>単価ログ</td><td>すべての LLM 呼び出しを 1 リクエスト単位で記録(モデル・トークン数・推定コスト)。セッション完了時に役割別の内訳サマリを出力</td></tr>
+  <tr><td>請求との突き合わせ</td><td>内部推定と実際のクレジット消費を照合済み(差 6%)。推定値ではなく検証済みの数字で語れる</td></tr>
+  <tr><td>セッション上限</td><td>1 セッション 80,000 トークンで打ち切り。1 人のユーザーが無制限に課金を発生させられない</td></tr>
+  <tr><td>レート制限</td><td>セッション作成は 10 回/時/メンバー。原価はセッション開始回数に比例するため、これがそのまま価格の防波堤になる</td></tr>
+  <tr><td>出力上限(max_tokens)</td><td>役割ごとに「必要な長さ」から上限を設定。実測の 1.5 倍以上の余裕を持たせつつ、暴走的な生成を防ぐ</td></tr>
+</table>
+
+<footer class="doc-footer">
+  <span>SocraMetry — コスト価格表(ブース配布用)</span>
+  <span>数値の根拠: docs/cost-model.md v0.3(実測・請求突き合わせ済み)</span>
+</footer>
+
+</body>
+</html>

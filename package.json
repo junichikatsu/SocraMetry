@@ -13,6 +13,7 @@
     "dev:web": "pnpm --filter @socrametry/web dev",
     "build": "turbo run build",
     "build:zip": "pnpm --filter @socrametry/function build:zip",
+    "build:handouts": "node scripts/build-handouts.mjs",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "lint": "eslint ."

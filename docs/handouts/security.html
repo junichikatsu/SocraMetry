@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>SocraMetry セキュリティ説明</title>
+<style>
+  @page {
+    size: A4;
+    margin: 14mm 16mm;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body {
+    font-family: "Yu Gothic UI", "Yu Gothic", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.7;
+    color: #1a2333;
+  }
+
+  /* ── ヘッダ ── */
+  .doc-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    border-bottom: 3px solid #1e5aa8;
+    padding-bottom: 8px;
+    margin-bottom: 14px;
+  }
+  .brand { font-size: 9pt; color: #1e5aa8; font-weight: bold; letter-spacing: 0.08em; }
+  .doc-title { font-size: 20pt; font-weight: bold; line-height: 1.3; }
+  .doc-meta { font-size: 8pt; color: #667085; text-align: right; }
+
+  .lead { margin-bottom: 14px; }
+  .lead strong { color: #1e5aa8; }
+
+  h2 {
+    font-size: 12.5pt;
+    color: #1e5aa8;
+    border-left: 5px solid #1e5aa8;
+    padding-left: 8px;
+    margin: 18px 0 8px;
+    break-after: avoid;
+  }
+  h3 { font-size: 10.5pt; margin: 10px 0 4px; break-after: avoid; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 6px 0 10px;
+    font-size: 9.5pt;
+  }
+  th, td {
+    border: 1px solid #c9d4e3;
+    padding: 4px 8px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: #eaf1fa; font-weight: bold; }
+  tr { break-inside: avoid; }
+
+  .diagram {
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 8.5pt;
+    line-height: 1.5;
+    background: #f5f8fc;
+    border: 1px solid #c9d4e3;
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 8px 0 10px;
+    white-space: pre;
+  }
+
+  .note {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    font-size: 8.5pt;
+    color: #4a5a72;
+    background: #f7f8fa;
+    border-left: 3px solid #98a6ba;
+    padding: 6px 10px;
+    margin: 6px 0 10px;
+  }
+  .honest {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    font-size: 9pt;
+    background: #fff7e8;
+    border: 1px solid #e0b862;
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin: 8px 0 12px;
+  }
+  .honest strong { color: #8a6100; }
+
+  code {
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 9pt;
+    background: #f0f3f7;
+    padding: 0 3px;
+    border-radius: 3px;
+  }
+
+  .doc-footer {
+    margin-top: 18px;
+    padding-top: 6px;
+    border-top: 1px solid #c9d4e3;
+    font-size: 7.5pt;
+    color: #98a6ba;
+    display: flex;
+    justify-content: space-between;
+  }
+  .page-break { break-before: page; }
+</style>
+</head>
+<body>
+
+<header class="doc-header">
+  <div>
+    <div class="brand">SocraMetry — AI に答えを出させるのではなく、AI に問いを出させる。</div>
+    <div class="doc-title">セキュリティ説明</div>
+  </div>
+  <div class="doc-meta">
+    2026-08-14 版<br>
+    v0.1 実装時点
+  </div>
+</header>
+
+<p class="lead">
+SocraMetry はエラーログを貼り付けて使う製品です。エラーログには
+API キーや接続文字列が日常的に混入するため、<strong>「混入する前提」でシステム側が守る設計</strong>にしています。
+本書は、何をしていて、何を保証していないかをまとめたものです。
+</p>
+
+<h2>1. この製品固有のリスクを直視する</h2>
+
+<table>
+  <tr><th>#</th><th>リスク</th><th>なぜ避けられないか</th></tr>
+  <tr><td>R1</td><td><strong>入力に認証情報が混入する</strong></td><td>貼り付けるのはエラーログ。ログには API キー・トークン・接続文字列が日常的に含まれる</td></tr>
+  <tr><td>R2</td><td><strong>入力が外部の LLM プロバイダに送られる</strong></td><td>診断のためにエラーテキストを LLM に渡す必要がある</td></tr>
+</table>
+
+<p>
+R1 は「ユーザーが気をつける」では解決しません。本人が気づかずに貼り付けるから混入するのであり、
+<strong>システム側で除去する以外に方法がない</strong>——これが設計の出発点です。
+</p>
+
+<h2>2. 秘匿情報の自動マスキング(R1 への対策)</h2>
+
+<p>
+データストアに保存する前・LLM に送る前に、認証情報を自動でマスクします。
+クライアントとサーバの<strong>二段構成</strong>で、同じマスキング関数を両側で実行します。
+</p>
+
+<div class="diagram">  ブラウザ ─┬─ ① 貼り付けた瞬間にマスク ──▶ ② マスク結果をプレビュー表示
+            │                                  (送信前に自分の目で確認できる)
+            └─ マスク済みテキストのみ送信
+                    │
+  サーバ   ─────── ③ マスキングを再実行(ここが正・冪等)
+                    ├──▶ データストアへ保存
+                    └──▶ LLM へ送信</div>
+
+<p class="note">
+クライアント側のマスクは UX のためであり、保証はサーバ側の再実行が担います。
+同一の関数を両側で使うため、<strong>プレビューで見た内容と実際に送られる内容がずれません</strong>。
+生のテキストはブラウザから外に出ません。
+</p>
+
+<h3>自動で検出・マスクするもの</h3>
+
+<table>
+  <tr><th>対象</th><th>例・検出方法</th><th>置換後</th></tr>
+  <tr><td>API キー類</td><td><code>sk-</code>, <code>ghp_</code>, <code>AKIA</code>, <code>AIza</code> 等のプレフィックス + 長さ</td><td><code>[REDACTED_KEY]</code></td></tr>
+  <tr><td>Bearer トークン</td><td><code>Authorization: Bearer ...</code></td><td><code>[REDACTED_TOKEN]</code></td></tr>
+  <tr><td>接続文字列</td><td><code>postgres://user:pass@...</code> の資格情報部</td><td><code>[REDACTED_CREDENTIALS]</code></td></tr>
+  <tr><td>JWT</td><td><code>eyJ</code> で始まる 3 セグメント</td><td><code>[REDACTED_JWT]</code></td></tr>
+  <tr><td>メールアドレス</td><td>正規表現</td><td><code>[REDACTED_EMAIL]</code></td></tr>
+  <tr><td>ローカル絶対パス</td><td>ファイル名より前を<strong>すべて</strong>伏せる(中間ディレクトリの顧客名・プロジェクト名も残さない)</td><td><code>&lt;path&gt;/&lt;file&gt;</code></td></tr>
+  <tr><td>登録済みの社名・製品名</td><td>管理側で登録した語の完全一致</td><td><code>[REDACTED_NAME]</code></td></tr>
+</table>
+
+<div class="honest">
+<strong>正直にお伝えします — 自動では消せないものがあります。</strong><br>
+未登録の顧客名などの固有名詞は、正規表現では機械的に検出できません。
+そのため<strong>マスク結果を送信前にプレビューで表示</strong>し、利用者自身が確認・修正できる導線にしています。
+「マスキングしているから安全」ではなく、何をしていて何を保証していないかを明示する方針です。
+</div>
+
+<h2>3. LLM プロバイダへのデータの扱い(R2 への対策)</h2>
+
+<table>
+  <tr><th>項目</th><th>方針</th></tr>
+  <tr><td>学習への利用</td><td>ゲートウェイ(OrcaRouter)側で入力を学習に使わせない設定を確認し、明記する</td></tr>
+  <tr><td>送信内容</td><td>マスキング済みのエラーテキスト・コード断片のみ。メールアドレスや氏名は送らない</td></tr>
+  <tr><td>利用者への説明</td><td>外部 LLM に送られること・マスキングの内容と限界を UI に明記。送信内容は事前にプレビューで確認できる</td></tr>
+</table>
+
+<h2>4. API キーと認証の守り方</h2>
+
+<h3>API キーをブラウザに出さない</h3>
+
+<div class="diagram">  ✗ してはいけない構成   ブラウザ ──[APIキー]──▶ LLM ゲートウェイ
+                              ↑ DevTools で誰でも見える
+
+  ✓ SocraMetry           ブラウザ ──▶ サーバ関数 ──[APIキー]──▶ LLM ゲートウェイ
+                                          ↑ 実行環境の環境変数にのみ存在</div>
+
+<p class="note">
+キーはクラウド実行環境の環境変数にのみ置き、リポジトリにも CI にも置きません。
+CI が知るシークレットをデプロイ用の 1 つに絞ることで、漏洩経路そのものを減らしています。
+</p>
+
+<h3>認証・アクセス制御(v0.1)</h3>
+
+<table>
+  <tr><th>項目</th><th>実装</th></tr>
+  <tr><td>登録</td><td><strong>招待コード必須</strong>。公開 URL に無制限のサインアップを置かない(コスト流出防止を兼ねる)</td></tr>
+  <tr><td>パスワード</td><td>ソルト付き scrypt でハッシュ化して保存(平文保存しない)</td></tr>
+  <tr><td>セッション</td><td>JWT を HttpOnly / Secure / SameSite=Lax の Cookie に格納。有効期限 24 時間</td></tr>
+  <tr><td>他人のデータ</td><td>データストアのキーに所有者 ID を含める構造のため、<strong>他人のセッション ID を渡しても「存在しない」としか返らない</strong></td></tr>
+  <tr><td>入力検証</td><td>サーバ側で必ず検証(文字数上限・許可リスト・ID 形式)。フロントの検証は UX のためで、防御はサーバが担う</td></tr>
+</table>
+
+<h2>5. ログに個人情報・秘匿情報を残さない</h2>
+
+<table>
+  <tr><th>記録する</th><th>記録しない</th></tr>
+  <tr>
+    <td>セッション ID(個人を特定しない)・役割・モデル名・トークン数・レイテンシ・推定コスト・エラーコード</td>
+    <td><strong>エラーテキストの本文・コード断片</strong>・メールアドレス・氏名・パスワード・例外に含まれる入力値</td>
+  </tr>
+</table>
+
+<p class="note">
+ログの目的は運用とコスト把握であり、入力内容の再現ではありません。
+本番環境では入力の「長さ」だけを記録し、本文は残しません。
+利用者は自分のセッションデータを削除できます。
+</p>
+
+<h2>6. 濫用への防御</h2>
+
+<table>
+  <tr><th>層</th><th>実装</th></tr>
+  <tr><td>レート制限</td><td>セッション作成 10 回/時/ユーザー。LLM コストの流出を防ぐ</td></tr>
+  <tr><td>トークン上限</td><td>1 セッション 80,000 トークンで打ち切り。暴走的な生成を止める</td></tr>
+  <tr><td>冪等性</td><td>同じ設問への二重回答は同じ結果を返す。API を直接叩かれても LLM を連打させられない</td></tr>
+  <tr><td>XSS</td><td>LLM の出力は信頼できない入力として扱い、HTML として描画しない</td></tr>
+  <tr><td>通信</td><td>すべて HTTPS(実行環境が TLS を終端)</td></tr>
+</table>
+
+<h2>7. v0.1 で対応していないこと</h2>
+
+<p>やっていないことを「やった」とは書きません。以下は v0.2 以降の対応です。</p>
+
+<table>
+  <tr><th>項目</th><th>現状の扱い</th></tr>
+  <tr><td>マルチテナント・ロール管理 / 監査ログ</td><td>v0.2 で対応。v0.1 は招待制の限定公開で運用</td></tr>
+  <tr><td>SSO / OIDC</td><td>v0.2 で対応。v0.1 は簡易ログインで代替</td></tr>
+  <tr><td>パスワードリセット</td><td>v0.2 で対応。招待コード制の限定公開のため</td></tr>
+  <tr><td>WAF / DDoS 対策</td><td>実行環境側に委ねる</td></tr>
+</table>
+
+<footer class="doc-footer">
+  <span>SocraMetry — セキュリティ説明(ブース配布用)</span>
+  <span>根拠: docs/security.md v0.1</span>
+</footer>
+
+</body>
+</html>
