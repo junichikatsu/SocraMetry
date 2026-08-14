@@ -6,14 +6,14 @@
 <style>
   @page {
     size: A4 landscape;
-    margin: 10mm 12mm;
+    margin: 11mm 13mm;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   body {
     font-family: "Yu Gothic UI", "Yu Gothic", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
-    font-size: 8.5pt;
-    line-height: 1.55;
+    font-size: 10pt;
+    line-height: 1.7;
     color: #1a2333;
   }
 
@@ -21,41 +21,41 @@
     display: flex;
     justify-content: space-between;
     align-items: flex-end;
-    border-bottom: 2.5px solid #1e5aa8;
-    padding-bottom: 4px;
-    margin-bottom: 8px;
+    border-bottom: 3px solid #1e5aa8;
+    padding-bottom: 6px;
+    margin-bottom: 14px;
   }
-  .brand { font-size: 7.5pt; color: #1e5aa8; font-weight: bold; letter-spacing: 0.06em; }
-  .doc-title { font-size: 15pt; font-weight: bold; line-height: 1.3; }
-  .doc-title small { font-size: 9pt; font-weight: normal; color: #4a5a72; }
-  .doc-meta { font-size: 7pt; color: #667085; text-align: right; }
+  .brand { font-size: 8.5pt; color: #1e5aa8; font-weight: bold; letter-spacing: 0.06em; }
+  .doc-title { font-size: 18pt; font-weight: bold; line-height: 1.3; }
+  .doc-title small { font-size: 10.5pt; font-weight: normal; color: #4a5a72; }
+  .doc-meta { font-size: 8pt; color: #667085; text-align: right; }
 
   /* 3 カラム */
   .grid {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
-    gap: 10px;
+    gap: 20px;
   }
   .col { min-width: 0; }
 
   h2 {
-    font-size: 9.5pt;
+    font-size: 11.5pt;
     color: #1e5aa8;
     border-left: 4px solid #1e5aa8;
-    padding-left: 6px;
-    margin: 8px 0 4px;
+    padding-left: 8px;
+    margin: 16px 0 8px;
   }
   .col > h2:first-child { margin-top: 0; }
 
   table {
     width: 100%;
     border-collapse: collapse;
-    margin: 2px 0 4px;
-    font-size: 8pt;
+    margin: 4px 0 10px;
+    font-size: 9pt;
   }
   th, td {
     border: 1px solid #c9d4e3;
-    padding: 2px 5px;
+    padding: 4px 8px;
     text-align: left;
     vertical-align: top;
   }
@@ -63,53 +63,53 @@
   td.num, th.num { text-align: right; }
   tr.total td { background: #f5f8fc; font-weight: bold; }
 
-  .stats { display: flex; flex-direction: column; gap: 6px; }
+  .stats { display: flex; flex-direction: column; gap: 12px; }
   .stat {
     border: 1.5px solid #1e5aa8;
     border-radius: 6px;
-    padding: 5px 10px;
+    padding: 10px 12px;
     text-align: center;
   }
-  .stat .label { font-size: 7.5pt; color: #4a5a72; }
-  .stat .value { font-size: 15pt; font-weight: bold; color: #1e5aa8; line-height: 1.35; }
-  .stat .sub { font-size: 7pt; color: #667085; }
+  .stat .label { font-size: 9pt; color: #4a5a72; }
+  .stat .value { font-size: 19pt; font-weight: bold; color: #1e5aa8; line-height: 1.4; }
+  .stat .sub { font-size: 8pt; color: #667085; }
 
   .diagram {
     font-family: Consolas, "Courier New", monospace;
-    font-size: 7pt;
-    line-height: 1.45;
+    font-size: 8pt;
+    line-height: 1.55;
     background: #f5f8fc;
     border: 1px solid #c9d4e3;
     border-radius: 5px;
-    padding: 6px 8px;
-    margin: 2px 0 4px;
+    padding: 8px 10px;
+    margin: 4px 0 10px;
     white-space: pre;
   }
 
   .note {
-    font-size: 7.5pt;
+    font-size: 8.5pt;
     color: #4a5a72;
     background: #f7f8fa;
     border-left: 3px solid #98a6ba;
-    padding: 4px 8px;
-    margin: 2px 0 4px;
+    padding: 6px 10px;
+    margin: 4px 0 10px;
   }
   .caution {
-    font-size: 7.5pt;
+    font-size: 8.5pt;
     background: #fff7e8;
     border: 1px solid #e0b862;
     border-radius: 5px;
-    padding: 4px 8px;
-    margin: 2px 0 4px;
+    padding: 6px 10px;
+    margin: 4px 0 10px;
   }
   .caution strong { color: #8a6100; }
   .point { color: #1e5aa8; }
 
   .doc-footer {
-    margin-top: 8px;
-    padding-top: 4px;
+    margin-top: 16px;
+    padding-top: 6px;
     border-top: 1px solid #c9d4e3;
-    font-size: 6.5pt;
+    font-size: 7.5pt;
     color: #98a6ba;
     display: flex;
     justify-content: space-between;
