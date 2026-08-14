@@ -1,0 +1,3 @@
+# build-handouts.mjs の一時ファイル(削除に失敗して残ることがある)
+*.tmp.html
+.headless-profile.tmp/
